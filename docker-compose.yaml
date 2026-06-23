@@ -1,0 +1,13 @@
+services:
+  monovideo3d:
+    build: .
+    volumes:
+      - ./data:/app/data
+    working_dir: /app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
