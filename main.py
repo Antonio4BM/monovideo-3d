@@ -65,6 +65,15 @@ def build_parser():
     )
     colmap_dense_parser.add_argument("--images_path", type=str, required=True)
 
+    colmap_sparse_parser = subparsers.add_parser(
+        "colmap-sparse",
+        help="Create sparse point cloud"
+    )
+
+    colmap_sparse_parser.add_argument("--video_path", type=str, required=True)
+    colmap_sparse_parser.add_argument("--output_path", type=str, required=True)
+    colmap_sparse_parser.add_argument("--strides", type=int, default=20)
+
     return parser
 
 
@@ -85,6 +94,13 @@ def main():
         visualize(args.images_path, args.filename)
     elif args.command == "colmap-fusion":
         stereo_fusion(args.images_path)
+    elif args.command == "colmap-sparse":
+        extract_frames(args.video_path, args.output_path, args.strides)
+        features_extractor(args.output_path)
+        features_matcher(args.output_path)
+        colmap_mapper(args.output_path)
+        reconstructor(args.output_path)
+        visualize(args.output_path, "reconstructed")
     elif args.command == "colmap-dense":
         image_undistorter(args.images_path)
         patch_match_stereo(args.images_path)
