@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MonoVideo3D Upload</title>
+  <link rel="stylesheet" href="./index.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>Upload video</h1>
+    <p class="hint">Videos must be between 20 and 40 seconds long.</p>
+
+    <div id="drop-zone" role="button" tabindex="0" aria-label="Choose or drop a video file">
+      <p><strong>Click to choose a file</strong></p>
+      <p>or drag and drop a video here</p>
+    </div>
+
+    <input id="file-input" type="file" accept="video/*" hidden />
+
+    <p id="file-name">No file selected</p>
+    <button id="upload-btn" type="button" disabled>Upload</button>
+    <p id="status" role="status" aria-live="polite"></p>
+  </main>
+
+  <div id="duration-modal" class="modal" hidden aria-hidden="true">
+    <div class="modal__backdrop" data-close-modal></div>
+    <div
+      class="modal__dialog"
+      role="alertdialog"
+      aria-modal="true"
+      aria-labelledby="duration-modal-title"
+      aria-describedby="duration-modal-message"
+    >
+      <h2 id="duration-modal-title">Video length not allowed</h2>
+      <p id="duration-modal-message">
+        The video length should be between 20 seconds and 40 seconds.
+      </p>
+      <button id="duration-modal-close" type="button">OK</button>
+    </div>
+  </div>
+
+  <script type="module" src="./index.js"></script>
+</body>
+</html>
