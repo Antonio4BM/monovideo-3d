@@ -4,15 +4,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
+WORKDIR /monovideo
 RUN python3 -m venv venv
-ENV PATH="/app/venv/bin:$PATH"
+ENV PATH="/monovideo/venv/bin:$PATH"
 
 COPY requirements.txt .
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY pipeline/ pipeline/
-COPY main.py .
+COPY . .
 
-ENTRYPOINT ["python", "main.py"]
+ENTRYPOINT ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
