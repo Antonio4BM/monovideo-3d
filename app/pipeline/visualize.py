@@ -2,7 +2,6 @@ import logging
 from pathlib import Path
 
 import trimesh
-import numpy as np
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

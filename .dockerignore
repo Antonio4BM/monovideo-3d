@@ -1,0 +1,5 @@
+data/*
+monovideo-env/
+__pycache__/
+.git/
+.gitignore

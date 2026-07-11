@@ -1,0 +1,139 @@
+:root {
+  --bg: #f3f6f8;
+  --ink: #1a2330;
+  --muted: #5a6a7a;
+  --accent: #0d6e6e;
+  --accent-soft: #e4f3f3;
+  --danger: #9b2c2c;
+  --border: #9aa8b5;
+  --surface: #ffffff;
+  --shadow: 0 12px 40px rgba(26, 35, 48, 0.18);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(ellipse at top left, #d9ecec 0%, transparent 45%),
+    radial-gradient(ellipse at bottom right, #e8eef4 0%, transparent 40%),
+    var(--bg);
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 2.5rem 1rem 3rem;
+}
+
+h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+  letter-spacing: -0.02em;
+}
+
+.hint {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+}
+
+#drop-zone {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 3rem 1rem;
+  text-align: center;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  transition: border-color 0.2s, background 0.2s;
+}
+
+#drop-zone:hover,
+#drop-zone:focus-visible {
+  border-color: var(--accent);
+  outline: none;
+}
+
+#drop-zone.dragover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+#file-name {
+  margin-top: 1rem;
+  color: var(--muted);
+}
+
+#upload-btn {
+  margin-top: 1rem;
+  padding: 0.65rem 1.35rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+}
+
+#upload-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+#status {
+  margin-top: 1rem;
+  min-height: 1.5rem;
+}
+
+.modal[hidden] {
+  display: none;
+}
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+
+.modal__backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(26, 35, 48, 0.45);
+}
+
+.modal__dialog {
+  position: relative;
+  width: min(100%, 420px);
+  padding: 1.5rem;
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.modal__dialog h2 {
+  margin: 0 0 0.75rem;
+  font-size: 1.25rem;
+  color: var(--danger);
+}
+
+.modal__dialog p {
+  margin: 0 0 1.25rem;
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+.modal__dialog button {
+  padding: 0.55rem 1.2rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--ink);
+  color: #fff;
+  cursor: pointer;
+}

@@ -1,13 +1,13 @@
 import argparse
-from pipeline.extract_frames import extract_frames
-from pipeline.colmap_features_extractor import features_extractor
-from pipeline.features_matcher import features_matcher
-from pipeline.colmap_mapper import colmap_mapper
-from pipeline.colmap_reconstructor import reconstructor
-from pipeline.visualize import visualize
-from pipeline.image_undistorter import image_undistorter
-from pipeline.patch_match_stereo import patch_match_stereo
-from pipeline.stereo_fusion import stereo_fusion
+from app.pipeline.extract_frames import extract_frames
+from app.pipeline.colmap_features_extractor import features_extractor
+from app.pipeline.features_matcher import features_matcher
+from app.pipeline.colmap_mapper import colmap_mapper
+from app.pipeline.colmap_reconstructor import reconstructor
+from app.pipeline.visualize import visualize
+from app.pipeline.image_undistorter import image_undistorter
+from app.pipeline.patch_match_stereo import patch_match_stereo
+from app.pipeline.stereo_fusion import stereo_fusion
 
 def build_parser():
     parser = argparse.ArgumentParser(description="MonoVideo3D pipeline")
