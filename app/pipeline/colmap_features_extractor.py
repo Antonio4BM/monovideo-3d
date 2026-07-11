@@ -6,7 +6,22 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def features_extractor(images_path):
+    """Extract COLMAP features from JPEG frames under ``images_path``.
 
+    Creates a sibling ``colmap`` workspace, symlinks ``*.jpg`` frames into
+    ``colmap/images``, then runs ``colmap feature_extractor`` with a single
+    OPENCV camera model, writing results to ``colmap/database.db``.
+
+    Args:
+        images_path (str | Path): Directory containing source ``*.jpg`` frames.
+
+    Returns:
+        None: Always returns ``None``. On failure, logs the error and returns
+        early without raising.
+
+    Raises:
+        OSError: If directories or frame symlinks cannot be created.
+    """
     colmap_path = Path(images_path).parent / "colmap"
     colmap_path.mkdir(parents=True, exist_ok=True)
     frames_links = Path(colmap_path) / "images"
