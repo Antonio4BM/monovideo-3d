@@ -2,8 +2,10 @@ services:
   monovideo3d:
     build: .
     volumes:
-      - ./data:/app/data
-    working_dir: /app
+      - ./data:/monovideo/data
+    working_dir: /monovideo
+    ports:
+      - 8000:8000
     deploy:
       resources:
         reservations:
