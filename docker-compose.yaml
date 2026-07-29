@@ -1,4 +1,9 @@
 services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
   monovideo3d:
     build: .
     volumes:
@@ -6,6 +11,31 @@ services:
     working_dir: /monovideo
     ports:
       - 8000:8000
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      STRIDES: "5"
+    depends_on:
+      - redis
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  worker:
+    build: .
+    entrypoint: ["rq", "worker", "monovideo-3d", "--url", "redis://redis:6379/0"]
+    volumes:
+      - ./data:/monovideo/data
+    working_dir: /monovideo
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      - redis
     deploy:
       resources:
         reservations:
