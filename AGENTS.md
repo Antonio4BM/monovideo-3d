@@ -28,7 +28,7 @@ Use Dockerfile and docker-compose to containarize the application.
 ## Queue worker
 
 - Use RQ's default worker heartbeat. Do not override ``--worker-ttl``.
-- Set job timeout to 55 minutes (3300 seconds) on the queue and enqueued jobs. RQ 2.x worker CLI has no ``--job-timeout``.
+- Set job timeout to 55 minutes (3300 seconds) on the queue and enqueued jobs.
 
 ## Boundaries
 
