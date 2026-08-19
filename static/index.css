@@ -63,6 +63,28 @@ h1 {
   background: var(--accent-soft);
 }
 
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 1.25rem;
+  max-width: 12rem;
+}
+
+.field__label {
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.field select {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 1rem;
+}
+
 #file-name {
   margin-top: 1rem;
   color: var(--muted);

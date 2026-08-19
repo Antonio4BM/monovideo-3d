@@ -9,8 +9,21 @@ def test_queue_name_is_monovideo_3d():
     assert settings.QUEUE_NAME == "monovideo-3d"
 
 
-def test_default_strides():
-    assert settings.DEFAULT_STRIDES == 20
+def test_job_timeout_defaults_to_fifty_five_minutes(monkeypatch):
+    monkeypatch.delenv("JOB_TIMEOUT", raising=False)
+    importlib.reload(settings)
+
+    assert settings.JOB_TIMEOUT == 3300
+
+
+def test_job_timeout_from_environment(monkeypatch):
+    monkeypatch.setenv("JOB_TIMEOUT", "600")
+    importlib.reload(settings)
+
+    assert settings.JOB_TIMEOUT == 600
+
+    monkeypatch.delenv("JOB_TIMEOUT", raising=False)
+    importlib.reload(settings)
 
 
 def test_redis_url_defaults(monkeypatch):

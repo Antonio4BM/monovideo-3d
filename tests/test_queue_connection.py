@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from app.queue.connection import get_queue, get_redis_connection
-from app.queue.settings import QUEUE_NAME
+from app.queue.settings import JOB_TIMEOUT, QUEUE_NAME
 
 
 def test_get_redis_connection_uses_defaults():
@@ -29,7 +29,11 @@ def test_get_queue_uses_named_queue():
         queue_cls.return_value = MagicMock(name="queue")
         queue = get_queue(connection=fake_conn)
 
-    queue_cls.assert_called_once_with(QUEUE_NAME, connection=fake_conn)
+    queue_cls.assert_called_once_with(
+        QUEUE_NAME,
+        connection=fake_conn,
+        default_timeout=JOB_TIMEOUT,
+    )
     assert queue is queue_cls.return_value
 
 
@@ -41,4 +45,8 @@ def test_get_queue_creates_connection_when_omitted():
             get_queue()
 
     get_conn.assert_called_once_with()
-    queue_cls.assert_called_once_with(QUEUE_NAME, connection=fake_conn)
+    queue_cls.assert_called_once_with(
+        QUEUE_NAME,
+        connection=fake_conn,
+        default_timeout=JOB_TIMEOUT,
+    )

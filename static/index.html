@@ -18,6 +18,26 @@
 
     <input id="file-input" type="file" accept="video/*" hidden />
 
+    <label class="field" for="strides-select">
+      <span class="field__label">Frame stride</span>
+      <select id="strides-select" name="strides">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="5" selected>5</option>
+        <option value="10">10</option>
+        <option value="15">15</option>
+        <option value="20">20</option>
+      </select>
+    </label>
+
+    <label class="field" for="reconstruction-select">
+      <span class="field__label">Reconstruction</span>
+      <select id="reconstruction-select" name="reconstruction">
+        <option value="sparse" selected>Sparse</option>
+        <option value="dense">Dense</option>
+      </select>
+    </label>
+
     <p id="file-name">No file selected</p>
     <button id="upload-btn" type="button" disabled>Upload</button>
     <p id="status" role="status" aria-live="polite"></p>

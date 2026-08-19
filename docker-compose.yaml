@@ -14,7 +14,7 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      STRIDES: "5"
+      JOB_TIMEOUT: "3300"
     depends_on:
       - redis
     deploy:
@@ -27,13 +27,21 @@ services:
 
   worker:
     build: .
-    entrypoint: ["rq", "worker", "monovideo-3d", "--url", "redis://redis:6379/0"]
+    entrypoint:
+      [
+        "rq",
+        "worker",
+        "monovideo-3d",
+        "--url",
+        "redis://redis:6379/0",
+      ]
     volumes:
       - ./data:/monovideo/data
     working_dir: /monovideo
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      JOB_TIMEOUT: "3300"
     depends_on:
       - redis
     deploy:

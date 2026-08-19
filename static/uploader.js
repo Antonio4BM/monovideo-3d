@@ -169,13 +169,23 @@ export async function validateVideoFile(file, options = {}) {
  * Uploads a validated video to the app endpoint.
  *
  * @param {File} file Video file to upload.
+ * @param {number} strides Frame skip interval for reconstruction.
+ * @param {"sparse" | "dense"} reconstruction Reconstruction mode.
  * @param {string} [endpoint] Upload URL.
  * @param {typeof fetch} [fetchImpl] Fetch implementation (injectable for tests).
  * @returns {Promise<{ message: string }>} Parsed JSON response body.
  */
-export async function uploadVideo(file, endpoint = "/video-upload", fetchImpl = fetch) {
+export async function uploadVideo(
+  file,
+  strides,
+  reconstruction,
+  endpoint = "/video-upload",
+  fetchImpl = fetch,
+) {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("strides", String(strides));
+  formData.append("reconstruction", reconstruction);
 
   const response = await fetchImpl(endpoint, {
     method: "POST",
