@@ -9,6 +9,8 @@ import {
 const dropZone = document.querySelector("#drop-zone");
 const fileInput = document.querySelector("#file-input");
 const fileName = document.querySelector("#file-name");
+const stridesSelect = document.querySelector("#strides-select");
+const reconstructionSelect = document.querySelector("#reconstruction-select");
 const uploadBtn = document.querySelector("#upload-btn");
 const statusElement = document.querySelector("#status");
 const durationModal = document.querySelector("#duration-modal");
@@ -130,11 +132,13 @@ durationModal.querySelector("[data-close-modal]")?.addEventListener("click", clo
 uploadBtn.addEventListener("click", async () => {
   if (!selectedFile) return;
 
+  const strides = Number(stridesSelect.value);
+  const reconstruction = reconstructionSelect.value;
   statusElement.textContent = "Uploading…";
   uploadBtn.disabled = true;
 
   try {
-    const result = await uploadVideo(selectedFile);
+    const result = await uploadVideo(selectedFile, strides, reconstruction);
     statusElement.textContent = result.message ?? "Upload complete";
   } catch (err) {
     statusElement.textContent = err instanceof Error ? err.message : "Upload failed";
