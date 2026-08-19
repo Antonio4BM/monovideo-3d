@@ -183,14 +183,22 @@ describe("getVideoDuration", () => {
 });
 
 describe("uploadVideo", () => {
-  it("posts multipart data and returns JSON", async () => {
+  it("posts multipart data with strides and reconstruction and returns JSON", async () => {
     const file = makeFile();
-    const fetchImpl = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ message: "Video uploaded successfully" }),
-    }));
+    const fetchImpl = vi.fn(async (_url, options) => {
+      const body = /** @type {FormData} */ (options.body);
+      expect(body.get("strides")).toBe("5");
+      expect(body.get("reconstruction")).toBe("dense");
+      expect(body.has("file")).toBe(true);
+      return {
+        ok: true,
+        json: async () => ({ message: "Video uploaded successfully" }),
+      };
+    });
 
-    await expect(uploadVideo(file, "/video-upload", fetchImpl)).resolves.toEqual({
+    await expect(
+      uploadVideo(file, 5, "dense", "/video-upload", fetchImpl),
+    ).resolves.toEqual({
       message: "Video uploaded successfully",
     });
     expect(fetchImpl).toHaveBeenCalledWith(
@@ -205,8 +213,8 @@ describe("uploadVideo", () => {
       text: async () => "server error",
     }));
 
-    await expect(uploadVideo(makeFile(), "/video-upload", fetchImpl)).rejects.toThrow(
-      "server error",
-    );
+    await expect(
+      uploadVideo(makeFile(), 5, "sparse", "/video-upload", fetchImpl),
+    ).rejects.toThrow("server error");
   });
 });
