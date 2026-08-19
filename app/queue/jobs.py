@@ -8,7 +8,11 @@ from typing import Optional
 from rq import Queue
 from rq.job import Job
 
-from app.queue.settings import DATA_DIR, DEFAULT_STRIDES
+from app.queue.settings import DATA_DIR, JOB_TIMEOUT
+
+RECONSTRUCTION_SPARSE = "sparse"
+RECONSTRUCTION_DENSE = "dense"
+VALID_RECONSTRUCTIONS = frozenset({RECONSTRUCTION_SPARSE, RECONSTRUCTION_DENSE})
 
 
 def build_sparse_paths(job_id: str) -> tuple[str, str]:
@@ -28,7 +32,7 @@ def build_sparse_paths(job_id: str) -> tuple[str, str]:
 
 def run_sparse_reconstruction(
     job_id: str,
-    strides: int = DEFAULT_STRIDES,
+    strides: int,
 ) -> dict[str, str]:
     """Run ``colmap-sparse`` for an uploaded video via ``app.reconstruction``.
 
@@ -66,25 +70,81 @@ def run_sparse_reconstruction(
         "job_id": job_id,
         "video_path": video_path,
         "output_path": output_path,
+        "reconstruction": RECONSTRUCTION_SPARSE,
     }
 
 
-def enqueue_sparse_reconstruction(
+def run_dense_reconstruction(
     job_id: str,
-    strides: int = DEFAULT_STRIDES,
-    queue: Optional[Queue] = None,
-) -> Job:
-    """Enqueue a ``colmap-sparse`` job for the given upload UUID.
+    strides: int,
+) -> dict[str, str]:
+    """Run sparse then ``colmap-dense`` for an uploaded video.
 
     Args:
         job_id (str): UUID of the upload directory under ``data/``.
         strides (int): Frame skip interval when extracting frames.
+
+    Returns:
+        dict[str, str]: Job id, paths, and reconstruction mode.
+
+    Raises:
+        FileNotFoundError: If the video file does not exist.
+        subprocess.CalledProcessError: If a reconstruction CLI exits non-zero.
+    """
+    sparse_result = run_sparse_reconstruction(job_id, strides)
+    output_path = sparse_result["output_path"]
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.reconstruction",
+            "colmap-dense",
+            "--images_path",
+            output_path,
+        ],
+        check=True,
+    )
+    return {
+        **sparse_result,
+        "reconstruction": RECONSTRUCTION_DENSE,
+    }
+
+
+def enqueue_reconstruction(
+    job_id: str,
+    strides: int,
+    reconstruction: str,
+    queue: Optional[Queue] = None,
+) -> Job:
+    """Enqueue a sparse or dense reconstruction job for an upload UUID.
+
+    Args:
+        job_id (str): UUID of the upload directory under ``data/``.
+        strides (int): Frame skip interval when extracting frames.
+        reconstruction (str): Either ``sparse`` or ``dense``.
         queue (Queue | None): Optional RQ queue; created if omitted.
 
     Returns:
-        Job: The enqueued RQ job instance.
+        Job: The enqueued RQ job instance with a 55-minute ``job_timeout``.
+
+    Raises:
+        ValueError: If ``reconstruction`` is not a supported mode.
     """
     from app.queue.connection import get_queue
 
+    if reconstruction not in VALID_RECONSTRUCTIONS:
+        raise ValueError(f"Unsupported reconstruction: {reconstruction}")
+
     target_queue = queue or get_queue()
-    return target_queue.enqueue(run_sparse_reconstruction, job_id, strides)
+    worker = (
+        run_dense_reconstruction
+        if reconstruction == RECONSTRUCTION_DENSE
+        else run_sparse_reconstruction
+    )
+    return target_queue.enqueue(
+        worker,
+        job_id,
+        strides,
+        job_timeout=JOB_TIMEOUT,
+    )

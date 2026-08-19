@@ -5,7 +5,7 @@ from typing import Optional
 from redis import Redis
 from rq import Queue
 
-from app.queue.settings import QUEUE_NAME, REDIS_DB, REDIS_HOST, REDIS_PORT
+from app.queue.settings import JOB_TIMEOUT, QUEUE_NAME, REDIS_DB, REDIS_HOST, REDIS_PORT
 
 
 def get_redis_connection(
@@ -37,7 +37,7 @@ def get_queue(connection: Optional[Redis] = None) -> Queue:
         connection (Redis | None): Optional Redis client; created if omitted.
 
     Returns:
-        Queue: RQ queue named ``monovideo-3d``.
+        Queue: RQ queue named ``monovideo-3d`` with a 55-minute default timeout.
     """
     conn = connection or get_redis_connection()
-    return Queue(QUEUE_NAME, connection=conn)
+    return Queue(QUEUE_NAME, connection=conn, default_timeout=JOB_TIMEOUT)
