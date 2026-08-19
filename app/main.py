@@ -1,11 +1,12 @@
 import uuid
 from pathlib import Path
+from typing import Literal
 
 import uvicorn
-from fastapi import FastAPI, UploadFile
+from fastapi import FastAPI, Form, UploadFile
 from fastapi.staticfiles import StaticFiles
 
-from app.queue.jobs import enqueue_sparse_reconstruction
+from app.queue.jobs import enqueue_reconstruction
 
 app = FastAPI(title="MonoVideo3D-API")
 
@@ -14,11 +15,17 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
 @app.post("/video-upload")
-async def video_upload(file: UploadFile):
-    """Upload a video, save it, and enqueue sparse reconstruction.
+async def video_upload(
+    file: UploadFile,
+    strides: int = Form(...),
+    reconstruction: Literal["sparse", "dense"] = Form(...),
+):
+    """Upload a video, save it, and enqueue reconstruction.
 
     Args:
         file (UploadFile): Incoming video file from the multipart request.
+        strides (int): Frame skip interval for reconstruction (form field).
+        reconstruction (Literal["sparse", "dense"]): Reconstruction mode.
 
     Returns:
         dict[str, str]: Confirmation payload with ``message`` and ``job_id``.
@@ -34,7 +41,7 @@ async def video_upload(file: UploadFile):
     destination_path = video_dir / "video.mp4"
     destination_path.write_bytes(video_bytes)
 
-    enqueue_sparse_reconstruction(job_id)
+    enqueue_reconstruction(job_id, strides, reconstruction)
 
     return {"message": "Video uploaded successfully", "job_id": job_id}
 
