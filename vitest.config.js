@@ -7,7 +7,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reportsDirectory: "static/tests/coverage",
-      include: ["static/uploader.js"],
+      include: ["static/uploader.js", "static/gallery.js"],
       thresholds: {
         lines: 75,
         functions: 75,
