@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MonoVideo3D Reconstructions</title>
+  <link rel="stylesheet" href="./reconstructions.css" />
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.5.0/model-viewer.min.js"></script>
+</head>
+<body>
+  <main class="page">
+    <nav class="nav" aria-label="Primary">
+      <a href="/">Upload</a>
+      <a href="/reconstructions" aria-current="page">Reconstructions</a>
+    </nav>
+    <h1>Finished reconstructions</h1>
+    <p class="hint">Select a reconstructed.glb or fused.glb job to view it in the model viewer.</p>
+
+    <div class="layout">
+      <div class="sidebars">
+        <aside class="sidebar">
+          <h2>Reconstructed</h2>
+          <p id="list-status" role="status" aria-live="polite">Loading…</p>
+          <ul id="reconstruction-list" class="job-list"></ul>
+        </aside>
+
+        <aside class="sidebar">
+          <h2>Fused</h2>
+          <p id="fused-list-status" role="status" aria-live="polite">Loading…</p>
+          <ul id="fused-list" class="job-list"></ul>
+        </aside>
+      </div>
+
+      <section class="viewer" aria-label="3D model">
+        <p id="viewer-empty" class="viewer__empty">Select a reconstruction to view.</p>
+        <model-viewer
+          id="model-viewer"
+          hidden
+          camera-controls
+          touch-action="pan-y"
+          shadow-intensity="1"
+          alt="Reconstructed 3D model"
+        ></model-viewer>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="./reconstructions.js"></script>
+</body>
+</html>
