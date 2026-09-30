@@ -2,6 +2,8 @@
  * Helpers for listing finished reconstructions and selecting a GLB model.
  */
 
+import { frameViewerOnCloud } from "./glb-framing.js";
+
 /**
  * Fetches reconstructed and fused job lists from the API.
  *
@@ -130,4 +132,5 @@ export function showReconstruction(viewerEl, emptyEl, glbUrl) {
   if (emptyEl) {
     emptyEl.hidden = true;
   }
+  void frameViewerOnCloud(viewerEl, glbUrl);
 }
