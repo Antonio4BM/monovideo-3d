@@ -149,6 +149,9 @@ describe("markSelectedJob", () => {
 
 describe("showReconstruction", () => {
   it("sets the viewer source and hides the empty state", () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: false,
+    });
     const viewerEl = document.createElement("div");
     viewerEl.hidden = true;
     const emptyEl = document.createElement("p");
@@ -158,5 +161,6 @@ describe("showReconstruction", () => {
     expect(viewerEl.getAttribute("src")).toBe(JOB.glb_url);
     expect(viewerEl.hidden).toBe(false);
     expect(emptyEl.hidden).toBe(true);
+    fetchSpy.mockRestore();
   });
 });
