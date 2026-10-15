@@ -10,6 +10,7 @@ from app.pipeline.patch_match_stereo import patch_match_stereo
 from app.pipeline.stereo_fusion import stereo_fusion
 
 def build_parser():
+    """Build the command parser for reconstruction pipeline stages."""
     parser = argparse.ArgumentParser(description="MonoVideo3D pipeline")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -74,18 +75,35 @@ def build_parser():
     colmap_sparse_parser.add_argument("--output_path", type=str, required=True)
     colmap_sparse_parser.add_argument("--strides", type=int, default=20)
 
+    for feature_parser in (
+        colmap_features_extractor_parser,
+        colmap_feature_matcher_parser,
+        colmap_sparse_parser,
+    ):
+        feature_parser.add_argument(
+            "--feature_extractor_algorithm",
+            choices=("SIFT", "ORB", "AKAZE"),
+            default="SIFT",
+            help="Feature extraction and matching algorithm (default: SIFT)",
+        )
+
     return parser
 
 
 def main():
+    """Run the selected reconstruction stage with its parsed options."""
     parser = build_parser()
     args = parser.parse_args()
     if args.command == "extract-frames":
         extract_frames(args.video_path, args.output_path, args.strides)
     elif args.command == "colmap-features":
-        features_extractor(args.images_path)
+        features_extractor(
+            args.images_path, algorithm=args.feature_extractor_algorithm
+        )
     elif args.command == "colmap-matches":
-        features_matcher(args.images_path)
+        features_matcher(
+            args.images_path, algorithm=args.feature_extractor_algorithm
+        )
     elif args.command == "colmap-mapper":
         colmap_mapper(args.images_path)
     elif args.command == "colmap-reconstructor":
@@ -96,8 +114,12 @@ def main():
         stereo_fusion(args.images_path)
     elif args.command == "colmap-sparse":
         extract_frames(args.video_path, args.output_path, args.strides)
-        features_extractor(args.output_path)
-        features_matcher(args.output_path)
+        features_extractor(
+            args.output_path, algorithm=args.feature_extractor_algorithm
+        )
+        features_matcher(
+            args.output_path, algorithm=args.feature_extractor_algorithm
+        )
         colmap_mapper(args.output_path)
         reconstructor(args.output_path)
         visualize(args.output_path, "reconstructed")
