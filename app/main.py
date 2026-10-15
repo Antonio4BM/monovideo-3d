@@ -26,6 +26,7 @@ async def video_upload(
     file: UploadFile,
     strides: int = Form(...),
     reconstruction: Literal["sparse", "dense"] = Form(...),
+    feature_extractor_algorithm: Literal["SIFT", "ORB", "AKAZE"] = Form("SIFT"),
 ):
     """Upload a video, save it, and enqueue reconstruction.
 
@@ -33,6 +34,7 @@ async def video_upload(
         file (UploadFile): Incoming video file from the multipart request.
         strides (int): Frame skip interval for reconstruction (form field).
         reconstruction (Literal["sparse", "dense"]): Reconstruction mode.
+        feature_extractor_algorithm (str): Feature algorithm; defaults to SIFT.
 
     Returns:
         dict[str, str]: Confirmation payload with ``message`` and ``job_id``.
@@ -48,7 +50,9 @@ async def video_upload(
     destination_path = video_dir / "video.mp4"
     destination_path.write_bytes(video_bytes)
 
-    enqueue_reconstruction(job_id, strides, reconstruction)
+    enqueue_reconstruction(
+        job_id, strides, reconstruction, feature_extractor_algorithm,
+    )
 
     return {"message": "Video uploaded successfully", "job_id": job_id}
 
