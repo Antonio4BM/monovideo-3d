@@ -171,6 +171,7 @@ export async function validateVideoFile(file, options = {}) {
  * @param {File} file Video file to upload.
  * @param {number} strides Frame skip interval for reconstruction.
  * @param {"sparse" | "dense"} reconstruction Reconstruction mode.
+ * @param {"SIFT" | "ORB" | "AKAZE"} [extractorAlgorithm] Feature algorithm (default SIFT).
  * @param {string} [endpoint] Upload URL.
  * @param {typeof fetch} [fetchImpl] Fetch implementation (injectable for tests).
  * @returns {Promise<{ message: string }>} Parsed JSON response body.
@@ -179,6 +180,7 @@ export async function uploadVideo(
   file,
   strides,
   reconstruction,
+  extractorAlgorithm = "SIFT",
   endpoint = "/video-upload",
   fetchImpl = fetch,
 ) {
@@ -186,6 +188,7 @@ export async function uploadVideo(
   formData.append("file", file);
   formData.append("strides", String(strides));
   formData.append("reconstruction", reconstruction);
+  formData.append("feature_extractor_algorithm", extractorAlgorithm);
 
   const response = await fetchImpl(endpoint, {
     method: "POST",
