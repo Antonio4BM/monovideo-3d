@@ -1,6 +1,6 @@
 import argparse
 from app.pipeline.extract_frames import extract_frames
-from app.pipeline.colmap_features_extractor import features_extractor
+from app.pipeline.features_extractor import features_extractor
 from app.pipeline.features_matcher import features_matcher
 from app.pipeline.colmap_mapper import colmap_mapper
 from app.pipeline.colmap_reconstructor import reconstructor
@@ -22,11 +22,11 @@ def build_parser():
     extract_frames_parser.add_argument("--output_path", type=str, required=True)
     extract_frames_parser.add_argument("--strides", type=int, default=20)
 
-    colmap_features_extractor_parser = subparsers.add_parser(
+    features_extractor_parser = subparsers.add_parser(
         "colmap-features",
         help="Extract features from a video"
     )
-    colmap_features_extractor_parser.add_argument("--images_path", type=str, required=True)
+    features_extractor_parser.add_argument("--images_path", type=str, required=True)
 
     colmap_feature_matcher_parser = subparsers.add_parser(
         "colmap-matches",
@@ -76,7 +76,7 @@ def build_parser():
     colmap_sparse_parser.add_argument("--strides", type=int, default=20)
 
     for feature_parser in (
-        colmap_features_extractor_parser,
+        features_extractor_parser,
         colmap_feature_matcher_parser,
         colmap_sparse_parser,
     ):
