@@ -227,10 +227,11 @@ def _match_binary_features(images_path, colmap_path, algorithm):
 def features_matcher(images_path, algorithm="SIFT"):
     """Match features and geometrically verify their image correspondences.
 
-    SIFT uses COLMAP's existing sequential matcher. ORB and AKAZE read NPZ
-    archives, use Hamming KNN with a 0.75 ratio filter over the next 12
-    extracted frames, and import raw matches for COLMAP verification. Binary
-    workflows create a new database and do not perform loop detection.
+    All algorithms pair each frame with the next 12 extracted frames in
+    natural filename order, without loop detection. SIFT passes an explicit
+    pair list to COLMAP for descriptor matching and geometric verification.
+    ORB and AKAZE read NPZ archives, use Hamming KNN with a 0.75 ratio filter,
+    and import raw matches into a new database for COLMAP verification.
 
     Args:
         images_path (str | Path): Directory containing source JPEG frames.
@@ -260,16 +261,30 @@ def features_matcher(images_path, algorithm="SIFT"):
             "SELECT 1 FROM sqlite_master WHERE name = 'monovideo_features'"
         ).fetchone():
             raise ValueError("Cannot run SIFT matching on a binary-feature database")
-    try:
-        subprocess.run(
-            [
-                "colmap", "sequential_matcher",
-                "--database_path", database_path,
-                "--SequentialMatching.overlap", str(FRAME_OVERLAP),
-                "--SequentialMatching.loop_detection", "1",
-                "--FeatureMatching.type", "SIFT_BRUTEFORCE",
-            ],
-            check=True,
-        )
-    except subprocess.CalledProcessError as exc:
-        logger.error("Failed to match features: %s", exc)
+    frames = sorted(Path(images_path).glob("*.jpg"), key=_frame_order)
+    if len(frames) < 2:
+        raise ValueError("At least two extracted frames are required")
+    if any(character.isspace() for frame in frames for character in frame.name):
+        raise ValueError("COLMAP match import requires names without spaces")
+
+    # COLMAP's sequential matcher sorts names lexicographically internally.
+    # Explicit pairs preserve the same temporal window as binary matching.
+    with TemporaryDirectory(prefix="sift-matching-", dir=colmap_path) as temp:
+        pairs_path = Path(temp) / "pairs.txt"
+        with pairs_path.open("w") as output:
+            for index, frame in enumerate(frames):
+                for candidate in frames[index + 1:index + FRAME_OVERLAP + 1]:
+                    output.write(f"{frame.name} {candidate.name}\n")
+        try:
+            subprocess.run(
+                [
+                    "colmap", "matches_importer",
+                    "--database_path", database_path,
+                    "--match_list_path", str(pairs_path),
+                    "--match_type", "pairs",
+                    "--FeatureMatching.type", "SIFT_BRUTEFORCE",
+                ],
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            logger.error("Failed to match features: %s", exc)
