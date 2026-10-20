@@ -13,6 +13,7 @@ client = TestClient(app)
 
 
 def test_video_upload_enqueues_sparse_job(tmp_path, monkeypatch):
+    """Save the uploaded video and enqueue sparse reconstruction with SIFT."""
     monkeypatch.chdir(tmp_path)
     Path("data").mkdir()
     Path("static").mkdir()
@@ -35,13 +36,12 @@ def test_video_upload_enqueues_sparse_job(tmp_path, monkeypatch):
     video_path = Path("data") / job_id / "video.mp4"
     assert video_path.is_file()
     assert video_path.read_bytes() == b"video-bytes"
-    enqueue.assert_called_once_with(
-        job_id, 10, "sparse", feature_extractor_algorithm="SIFT"
-    )
+    enqueue.assert_called_once_with(job_id, 10, "sparse", "SIFT")
 
 
 @pytest.mark.parametrize("algorithm", ["SIFT", "ORB", "AKAZE"])
 def test_video_upload_enqueues_dense_job(tmp_path, monkeypatch, algorithm):
+    """Enqueue dense reconstruction with the selected feature algorithm."""
     monkeypatch.chdir(tmp_path)
     Path("data").mkdir()
     Path("static").mkdir()
@@ -60,8 +60,7 @@ def test_video_upload_enqueues_dense_job(tmp_path, monkeypatch, algorithm):
 
     assert response.status_code == 200
     enqueue.assert_called_once_with(
-        response.json()["job_id"], 5, "dense",
-        feature_extractor_algorithm=algorithm,
+        response.json()["job_id"], 5, "dense", algorithm,
     )
 
 
