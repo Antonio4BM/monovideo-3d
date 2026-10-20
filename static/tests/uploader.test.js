@@ -183,12 +183,14 @@ describe("getVideoDuration", () => {
 });
 
 describe("uploadVideo", () => {
-  it("posts multipart data with strides and reconstruction and returns JSON", async () => {
+  it.each([undefined, "SIFT", "ORB", "AKAZE"])(
+    "posts multipart data with algorithm %s and returns JSON", async (algorithm) => {
     const file = makeFile();
     const fetchImpl = vi.fn(async (_url, options) => {
       const body = /** @type {FormData} */ (options.body);
       expect(body.get("strides")).toBe("5");
       expect(body.get("reconstruction")).toBe("dense");
+      expect(body.get("feature_extractor_algorithm")).toBe(algorithm ?? "SIFT");
       expect(body.has("file")).toBe(true);
       return {
         ok: true,
@@ -197,7 +199,7 @@ describe("uploadVideo", () => {
     });
 
     await expect(
-      uploadVideo(file, 5, "dense", "/video-upload", fetchImpl),
+      uploadVideo(file, 5, "dense", algorithm, "/video-upload", fetchImpl),
     ).resolves.toEqual({
       message: "Video uploaded successfully",
     });
@@ -214,7 +216,7 @@ describe("uploadVideo", () => {
     }));
 
     await expect(
-      uploadVideo(makeFile(), 5, "sparse", "/video-upload", fetchImpl),
+      uploadVideo(makeFile(), 5, "sparse", "SIFT", "/video-upload", fetchImpl),
     ).rejects.toThrow("server error");
   });
 });

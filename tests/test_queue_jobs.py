@@ -29,7 +29,8 @@ def test_run_sparse_reconstruction_missing_video(tmp_path, monkeypatch):
         run_sparse_reconstruction(job_id, strides=5)
 
 
-def test_run_sparse_reconstruction_invokes_cli(tmp_path, monkeypatch):
+@pytest.mark.parametrize("algorithm", ["SIFT", "ORB", "AKAZE"])
+def test_run_sparse_reconstruction_invokes_cli(tmp_path, monkeypatch, algorithm):
     monkeypatch.chdir(tmp_path)
     job_id = "job-1"
     video_dir = Path("data") / job_id
@@ -38,7 +39,9 @@ def test_run_sparse_reconstruction_invokes_cli(tmp_path, monkeypatch):
 
     with patch("app.queue.jobs.subprocess.run") as run_mock:
         run_mock.return_value = MagicMock(returncode=0)
-        result = run_sparse_reconstruction(job_id, strides=15)
+        result = run_sparse_reconstruction(
+            job_id, strides=15, feature_extractor_algorithm=algorithm
+        )
 
     assert result == {
         "job_id": job_id,
@@ -55,10 +58,14 @@ def test_run_sparse_reconstruction_invokes_cli(tmp_path, monkeypatch):
     assert "data/job-1/frames" in args
     assert "--strides" in args
     assert "15" in args
+    assert args[args.index("--feature_extractor_algorithm") + 1] == algorithm
     assert run_mock.call_args.kwargs["check"] is True
 
 
-def test_run_dense_reconstruction_runs_sparse_then_dense(tmp_path, monkeypatch):
+@pytest.mark.parametrize("algorithm", ["SIFT", "ORB", "AKAZE"])
+def test_run_dense_reconstruction_runs_sparse_then_dense(
+    tmp_path, monkeypatch, algorithm
+):
     monkeypatch.chdir(tmp_path)
     job_id = "job-dense"
     video_dir = Path("data") / job_id
@@ -67,7 +74,9 @@ def test_run_dense_reconstruction_runs_sparse_then_dense(tmp_path, monkeypatch):
 
     with patch("app.queue.jobs.subprocess.run") as run_mock:
         run_mock.return_value = MagicMock(returncode=0)
-        result = run_dense_reconstruction(job_id, strides=8)
+        result = run_dense_reconstruction(
+            job_id, strides=8, feature_extractor_algorithm=algorithm
+        )
 
     assert result == {
         "job_id": job_id,
@@ -80,12 +89,16 @@ def test_run_dense_reconstruction_runs_sparse_then_dense(tmp_path, monkeypatch):
     dense_args = run_mock.call_args_list[1].args[0]
     assert "colmap-sparse" in sparse_args
     assert "8" in sparse_args
+    assert sparse_args[
+        sparse_args.index("--feature_extractor_algorithm") + 1
+    ] == algorithm
     assert "colmap-dense" in dense_args
     assert "--images_path" in dense_args
     assert "data/job-dense/frames" in dense_args
 
 
 def test_enqueue_reconstruction_sparse_uses_queue():
+    """Enqueue a SIFT sparse job on the supplied queue."""
     fake_queue = MagicMock()
     fake_job = MagicMock(name="job")
     fake_queue.enqueue.return_value = fake_job
@@ -94,6 +107,7 @@ def test_enqueue_reconstruction_sparse_uses_queue():
         "uuid-1",
         strides=10,
         reconstruction="sparse",
+        feature_extractor_algorithm="SIFT",
         queue=fake_queue,
     )
 
@@ -102,11 +116,13 @@ def test_enqueue_reconstruction_sparse_uses_queue():
         run_sparse_reconstruction,
         "uuid-1",
         10,
+        feature_extractor_algorithm="SIFT",
         job_timeout=JOB_TIMEOUT,
     )
 
 
 def test_enqueue_reconstruction_dense_uses_queue():
+    """Enqueue a SIFT dense job on the supplied queue."""
     fake_queue = MagicMock()
     fake_job = MagicMock(name="job")
     fake_queue.enqueue.return_value = fake_job
@@ -115,6 +131,7 @@ def test_enqueue_reconstruction_dense_uses_queue():
         "uuid-dense",
         strides=5,
         reconstruction="dense",
+        feature_extractor_algorithm="SIFT",
         queue=fake_queue,
     )
 
@@ -123,28 +140,60 @@ def test_enqueue_reconstruction_dense_uses_queue():
         run_dense_reconstruction,
         "uuid-dense",
         5,
+        feature_extractor_algorithm="SIFT",
         job_timeout=JOB_TIMEOUT,
     )
 
 
 def test_enqueue_reconstruction_rejects_invalid_mode():
+    """Reject an unsupported mode with a valid feature algorithm."""
     with pytest.raises(ValueError, match="Unsupported reconstruction"):
-        enqueue_reconstruction("uuid-x", strides=5, reconstruction="mesh")
+        enqueue_reconstruction(
+            "uuid-x", strides=5, reconstruction="mesh",
+            feature_extractor_algorithm="SIFT",
+        )
 
 
 def test_enqueue_reconstruction_creates_queue_when_omitted():
+    """Create a queue when enqueuing a SIFT job without one."""
     fake_queue = MagicMock()
     fake_job = MagicMock(name="job")
     fake_queue.enqueue.return_value = fake_job
 
-    with patch("app.queue.connection.get_queue", return_value=fake_queue) as get_queue:
-        job = enqueue_reconstruction("uuid-2", strides=5, reconstruction="sparse")
+    with patch("app.queue.jobs.get_queue", return_value=fake_queue) as get_queue:
+        job = enqueue_reconstruction(
+            "uuid-2", strides=5, reconstruction="sparse",
+            feature_extractor_algorithm="SIFT",
+        )
 
     get_queue.assert_called_once_with()
     fake_queue.enqueue.assert_called_once_with(
         run_sparse_reconstruction,
         "uuid-2",
         5,
+        feature_extractor_algorithm="SIFT",
         job_timeout=JOB_TIMEOUT,
     )
     assert job is fake_job
+
+
+@pytest.mark.parametrize("algorithm", ["SIFT", "ORB", "AKAZE"])
+@pytest.mark.parametrize("mode", ["sparse", "dense"])
+def test_enqueue_passes_algorithm_to_worker(algorithm, mode):
+    """Preserve the selected algorithm in the serialized worker arguments."""
+    queue = MagicMock()
+    enqueue_reconstruction(
+        "job", 5, mode, queue=queue, feature_extractor_algorithm=algorithm
+    )
+    assert queue.enqueue.call_args.kwargs["feature_extractor_algorithm"] == algorithm
+    assert queue.enqueue.call_args.kwargs["job_timeout"] == JOB_TIMEOUT
+
+
+def test_enqueue_rejects_invalid_algorithm():
+    """Reject invalid feature algorithms before creating a queued job."""
+    queue = MagicMock()
+    with pytest.raises(ValueError, match="Unsupported feature algorithm"):
+        enqueue_reconstruction(
+            "job", 5, "sparse", queue=queue, feature_extractor_algorithm="SURF"
+        )
+    queue.enqueue.assert_not_called()

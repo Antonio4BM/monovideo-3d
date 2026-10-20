@@ -11,6 +11,7 @@ const fileInput = document.querySelector("#file-input");
 const fileName = document.querySelector("#file-name");
 const stridesSelect = document.querySelector("#strides-select");
 const reconstructionSelect = document.querySelector("#reconstruction-select");
+const featureExtractorSelect = document.querySelector("#feature-extractor-select");
 const uploadBtn = document.querySelector("#upload-btn");
 const statusElement = document.querySelector("#status");
 const durationModal = document.querySelector("#duration-modal");
@@ -134,11 +135,14 @@ uploadBtn.addEventListener("click", async () => {
 
   const strides = Number(stridesSelect.value);
   const reconstruction = reconstructionSelect.value;
+  const extractorAlgorithm = featureExtractorSelect.value;
   statusElement.textContent = "Uploading…";
   uploadBtn.disabled = true;
 
   try {
-    const result = await uploadVideo(selectedFile, strides, reconstruction);
+    const result = await uploadVideo(
+      selectedFile, strides, reconstruction, extractorAlgorithm,
+    );
     statusElement.textContent = result.message ?? "Upload complete";
   } catch (err) {
     statusElement.textContent = err instanceof Error ? err.message : "Upload failed";

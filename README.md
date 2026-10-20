@@ -20,7 +20,7 @@ monovideo3d/
 │   │   └── settings.py             # Queue name, timeout, Redis host
 │   └── pipeline/
 │       ├── extract_frames.py              # Sample frames from video (OpenCV)
-│       ├── colmap_features_extractor.py   # COLMAP feature extraction
+│       ├── features_extractor.py          # COLMAP SIFT or OpenCV ORB/AKAZE extraction
 │       ├── features_matcher.py            # COLMAP feature matching
 │       ├── colmap_mapper.py               # Sparse SfM mapping
 │       ├── colmap_reconstructor.py        # Sparse model → PLY
@@ -130,6 +130,8 @@ python -m app.reconstruction colmap-dense --images_path data/<uuid>/frames
 ```
 
 Individual commands: `extract-frames`, `colmap-features`, `colmap-matches`, `colmap-mapper`, `colmap-reconstructor`, `colmap-visualizer`, `colmap-fusion`, `colmap-dense`, `colmap-sparse`.
+
+All feature algorithms match each frame against the next 12 extracted frames in numerical filename order. SIFT uses an explicit COLMAP pair list; ORB and AKAZE use the same window with binary descriptors. Quadratic neighbors and loop-detection pairs are not added. Use a fresh job to evaluate this pairing policy: matching an existing database does not remove its previously stored pairs.
 
 ### Tests
 

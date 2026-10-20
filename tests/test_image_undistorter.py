@@ -4,7 +4,8 @@ import struct
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from app.pipeline.image_undistorter import image_undistorter, inspector
+from app.pipeline.image_undistorter import image_undistorter
+from app.pipeline.tools import inspector
 
 
 def _write_bin_count(path: Path, count: int) -> None:
