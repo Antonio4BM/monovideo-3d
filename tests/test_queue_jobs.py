@@ -98,6 +98,7 @@ def test_run_dense_reconstruction_runs_sparse_then_dense(
 
 
 def test_enqueue_reconstruction_sparse_uses_queue():
+    """Enqueue a SIFT sparse job on the supplied queue."""
     fake_queue = MagicMock()
     fake_job = MagicMock(name="job")
     fake_queue.enqueue.return_value = fake_job
@@ -106,6 +107,7 @@ def test_enqueue_reconstruction_sparse_uses_queue():
         "uuid-1",
         strides=10,
         reconstruction="sparse",
+        feature_extractor_algorithm="SIFT",
         queue=fake_queue,
     )
 
@@ -120,6 +122,7 @@ def test_enqueue_reconstruction_sparse_uses_queue():
 
 
 def test_enqueue_reconstruction_dense_uses_queue():
+    """Enqueue a SIFT dense job on the supplied queue."""
     fake_queue = MagicMock()
     fake_job = MagicMock(name="job")
     fake_queue.enqueue.return_value = fake_job
@@ -128,6 +131,7 @@ def test_enqueue_reconstruction_dense_uses_queue():
         "uuid-dense",
         strides=5,
         reconstruction="dense",
+        feature_extractor_algorithm="SIFT",
         queue=fake_queue,
     )
 
@@ -142,17 +146,25 @@ def test_enqueue_reconstruction_dense_uses_queue():
 
 
 def test_enqueue_reconstruction_rejects_invalid_mode():
+    """Reject an unsupported mode with a valid feature algorithm."""
     with pytest.raises(ValueError, match="Unsupported reconstruction"):
-        enqueue_reconstruction("uuid-x", strides=5, reconstruction="mesh")
+        enqueue_reconstruction(
+            "uuid-x", strides=5, reconstruction="mesh",
+            feature_extractor_algorithm="SIFT",
+        )
 
 
 def test_enqueue_reconstruction_creates_queue_when_omitted():
+    """Create a queue when enqueuing a SIFT job without one."""
     fake_queue = MagicMock()
     fake_job = MagicMock(name="job")
     fake_queue.enqueue.return_value = fake_job
 
-    with patch("app.queue.connection.get_queue", return_value=fake_queue) as get_queue:
-        job = enqueue_reconstruction("uuid-2", strides=5, reconstruction="sparse")
+    with patch("app.queue.jobs.get_queue", return_value=fake_queue) as get_queue:
+        job = enqueue_reconstruction(
+            "uuid-2", strides=5, reconstruction="sparse",
+            feature_extractor_algorithm="SIFT",
+        )
 
     get_queue.assert_called_once_with()
     fake_queue.enqueue.assert_called_once_with(
