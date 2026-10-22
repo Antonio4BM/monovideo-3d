@@ -1,11 +1,18 @@
 services:
   redis:
     image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     ports:
       - "6379:6379"
 
   monovideo3d:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.api
     volumes:
       - ./data:/monovideo/data
     working_dir: /monovideo
@@ -16,25 +23,13 @@ services:
       REDIS_PORT: "6379"
       JOB_TIMEOUT: "3300"
     depends_on:
-      - redis
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+      redis:
+        condition: service_healthy
 
   worker:
-    build: .
-    entrypoint:
-      [
-        "rq",
-        "worker",
-        "monovideo-3d",
-        "--url",
-        "redis://redis:6379/0",
-      ]
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
     volumes:
       - ./data:/monovideo/data
     working_dir: /monovideo
@@ -43,7 +38,8 @@ services:
       REDIS_PORT: "6379"
       JOB_TIMEOUT: "3300"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     deploy:
       resources:
         reservations:
