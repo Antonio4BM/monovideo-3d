@@ -74,12 +74,6 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Frontend tests (optional)
-
-```bash
-npm install
-```
-
 ## Usage
 
 ### Docker (recommended)
@@ -132,16 +126,6 @@ python -m app.reconstruction colmap-dense --images_path data/<uuid>/frames
 Individual commands: `extract-frames`, `colmap-features`, `colmap-matches`, `colmap-mapper`, `colmap-reconstructor`, `colmap-visualizer`, `colmap-fusion`, `colmap-dense`, `colmap-sparse`.
 
 All feature algorithms match each frame against the next 12 extracted frames in numerical filename order. SIFT uses an explicit COLMAP pair list; ORB and AKAZE use the same window with binary descriptors. Quadratic neighbors and loop-detection pairs are not added. Use a fresh job to evaluate this pairing policy: matching an existing database does not remove its previously stored pairs.
-
-### Tests
-
-```bash
-# Backend (API routes, reconstruction helpers, queue)
-pytest
-
-# Frontend (uploader + gallery)
-npm test
-```
 
 ## Stack
 

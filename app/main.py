@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.queue.jobs import enqueue_reconstruction
+from app.queue.settings import DATA_DIR as QUEUE_DATA_DIR
 from app.reconstruction_helpers import (
     FUSED_GLB,
     RECONSTRUCTED_GLB,
@@ -17,7 +18,7 @@ from app.reconstruction_helpers import (
 
 app = FastAPI(title="MonoVideo3D-API")
 
-DATA_DIR = Path("data")
+DATA_DIR = Path(QUEUE_DATA_DIR)
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 

@@ -1,13 +1,14 @@
 services:
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--port", "${REDIS_PORT:-6379}"]
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-p", "${REDIS_PORT:-6379}", "ping"]
       interval: 5s
       timeout: 3s
       retries: 5
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:${REDIS_PORT:-6379}"
 
   monovideo3d:
     build:
@@ -20,7 +21,10 @@ services:
       - 8000:8000
     environment:
       REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+      REDIS_DB: "${REDIS_DB:-0}"
+      QUEUE_NAME: "${QUEUE_NAME:-monovideo-3d}"
+      DATA_DIR: "${DATA_DIR:-data}"
       JOB_TIMEOUT: "3300"
     depends_on:
       redis:
@@ -35,11 +39,15 @@ services:
     working_dir: /monovideo
     environment:
       REDIS_HOST: redis
-      REDIS_PORT: "6379"
+      REDIS_PORT: "${REDIS_PORT:-6379}"
+      REDIS_DB: "${REDIS_DB:-0}"
+      QUEUE_NAME: "${QUEUE_NAME:-monovideo-3d}"
+      DATA_DIR: "${DATA_DIR:-data}"
       JOB_TIMEOUT: "3300"
     depends_on:
       redis:
         condition: service_healthy
+    command: ["rq", "worker", "${QUEUE_NAME:-monovideo-3d}", "--url", "redis://redis:${REDIS_PORT:-6379}/${REDIS_DB:-0}"]
     deploy:
       resources:
         reservations:
