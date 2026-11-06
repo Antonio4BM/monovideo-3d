@@ -8,8 +8,9 @@ from typing import Optional
 from rq import Queue
 from rq.job import Job
 
-from app.queue.settings import DATA_DIR, JOB_TIMEOUT
 from app.queue.connection import get_queue
+from app.s3 import get_object
+from app.settings import get_settings
 
 RECONSTRUCTION_SPARSE = "sparse"
 RECONSTRUCTION_DENSE = "dense"
@@ -26,7 +27,7 @@ def build_sparse_paths(job_id: str) -> tuple[str, str]:
     Returns:
         tuple[str, str]: Relative ``video_path`` and ``output_path``.
     """
-    base = Path(DATA_DIR) / job_id
+    base = get_settings().data_directory / job_id
     video_path = str(base / "video.mp4")
     output_path = str(base / "frames")
     return video_path, output_path
@@ -37,7 +38,7 @@ def run_sparse_reconstruction(
     strides: int,
     feature_extractor_algorithm: str = "SIFT",
 ) -> dict[str, str]:
-    """Run ``colmap-sparse`` for an uploaded video via ``app.reconstruction``.
+    """Download the S3 video, then run ``colmap-sparse`` reconstruction.
 
     Args:
         job_id (str): UUID of the upload directory under ``data/``.
@@ -49,12 +50,14 @@ def run_sparse_reconstruction(
 
     Raises:
         ValueError: If the feature algorithm is unsupported.
+        botocore.exceptions.ClientError: If the S3 download fails.
         FileNotFoundError: If the video file does not exist.
         subprocess.CalledProcessError: If the reconstruction CLI exits non-zero.
     """
     if feature_extractor_algorithm not in VALID_FEATURE_ALGORITHMS:
         raise ValueError(f"Unsupported feature algorithm: {feature_extractor_algorithm}")
     video_path, output_path = build_sparse_paths(job_id)
+    get_object(f"{job_id}/video.mp4", Path(video_path))
     if not Path(video_path).is_file():
         raise FileNotFoundError(f"Video not found: {video_path}")
 
@@ -83,12 +86,12 @@ def run_sparse_reconstruction(
     }
 
 
-def run_dense_reconstruction(
+def process_dense_job(
     job_id: str,
     strides: int,
     feature_extractor_algorithm: str = "SIFT",
 ) -> dict[str, str]:
-    """Run sparse then ``colmap-dense`` for an uploaded video.
+    """Run sparse reconstruction and remove the local video on exit.
 
     Args:
         job_id (str): UUID of the upload directory under ``data/``.
@@ -96,33 +99,73 @@ def run_dense_reconstruction(
         feature_extractor_algorithm (str): SIFT, ORB, or AKAZE; defaults to SIFT.
 
     Returns:
-        dict[str, str]: Job id, paths, and reconstruction mode.
+        dict[str, str]: Job metadata including the removed video's original
+        path and the retained frames directory.
 
     Raises:
         ValueError: If the feature algorithm is unsupported.
+        botocore.exceptions.ClientError: If the S3 download fails.
+        FileNotFoundError: If the downloaded video file does not exist.
+        subprocess.CalledProcessError: If the reconstruction CLI exits non-zero.
+        OSError: If the local video cannot be written or removed.
+    """
+    video_path, _ = build_sparse_paths(job_id)
+    try:
+        return run_sparse_reconstruction(
+            job_id, strides, feature_extractor_algorithm,
+        )
+    finally:
+        Path(video_path).unlink(missing_ok=True)
+
+
+def run_dense_reconstruction(
+    job_id: str,
+    strides: int,
+    feature_extractor_algorithm: str = "SIFT",
+) -> dict[str, str]:
+    """Run sparse then dense reconstruction and remove the local video on exit.
+
+    Args:
+        job_id (str): UUID of the upload directory under ``data/``.
+        strides (int): Frame skip interval when extracting frames.
+        feature_extractor_algorithm (str): SIFT, ORB, or AKAZE; defaults to SIFT.
+
+    Returns:
+        dict[str, str]: Job id, original video path, retained output paths,
+        and reconstruction mode.
+
+    Raises:
+        ValueError: If the feature algorithm is unsupported.
+        botocore.exceptions.ClientError: If the S3 download fails.
         FileNotFoundError: If the video file does not exist.
         subprocess.CalledProcessError: If a reconstruction CLI exits non-zero.
+        OSError: If the local video cannot be written or removed.
     """
-    sparse_result = run_sparse_reconstruction(
-        job_id, strides, feature_extractor_algorithm=feature_extractor_algorithm
-    )
-    output_path = sparse_result["output_path"]
+    video_path, _ = build_sparse_paths(job_id)
+    try:
+        sparse_result = run_sparse_reconstruction(
+            job_id, strides,
+            feature_extractor_algorithm=feature_extractor_algorithm,
+        )
+        output_path = sparse_result["output_path"]
 
-    subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "app.reconstruction",
-            "colmap-dense",
-            "--images_path",
-            output_path,
-        ],
-        check=True,
-    )
-    return {
-        **sparse_result,
-        "reconstruction": RECONSTRUCTION_DENSE,
-    }
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "app.reconstruction",
+                "colmap-dense",
+                "--images_path",
+                output_path,
+            ],
+            check=True,
+        )
+        return {
+            **sparse_result,
+            "reconstruction": RECONSTRUCTION_DENSE,
+        }
+    finally:
+        Path(video_path).unlink(missing_ok=True)
 
 
 def enqueue_reconstruction(
@@ -158,12 +201,12 @@ def enqueue_reconstruction(
     worker = (
         run_dense_reconstruction
         if reconstruction == RECONSTRUCTION_DENSE
-        else run_sparse_reconstruction
+        else process_dense_job
     )
     return target_queue.enqueue(
         worker,
         job_id,
         strides,
         feature_extractor_algorithm=feature_extractor_algorithm,
-        job_timeout=JOB_TIMEOUT,
+        job_timeout=get_settings().job_timeout,
     )
