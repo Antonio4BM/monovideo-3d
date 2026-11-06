@@ -1,24 +1,45 @@
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Literal
 
 import uvicorn
 from fastapi import FastAPI, Form, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.queue.jobs import enqueue_reconstruction
-from app.queue.settings import DATA_DIR as QUEUE_DATA_DIR
 from app.reconstruction_helpers import (
     FUSED_GLB,
     RECONSTRUCTED_GLB,
     list_finished_reconstructions,
     serve_colmap_glb,
 )
+from app.s3 import close_s3_client, put_object
+from app.settings import get_settings
 
-app = FastAPI(title="MonoVideo3D-API")
 
-DATA_DIR = Path(QUEUE_DATA_DIR)
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Release the shared S3 client when the API shuts down.
+
+    Args:
+        app (FastAPI): Application whose lifespan is being managed.
+
+    Yields:
+        None: Control while the application serves requests.
+    """
+    try:
+        yield
+    finally:
+        close_s3_client()
+
+
+app = FastAPI(title="MonoVideo3D-API", lifespan=lifespan)
+
+DATA_DIR = get_settings().data_directory
 STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 
 
@@ -29,7 +50,7 @@ async def video_upload(
     reconstruction: Literal["sparse", "dense"] = Form(...),
     feature_extractor_algorithm: Literal["SIFT", "ORB", "AKAZE"] = Form("SIFT"),
 ):
-    """Upload a video, save it, and enqueue reconstruction.
+    """Upload a video to S3 and enqueue reconstruction.
 
     Args:
         file (UploadFile): Incoming video file from the multipart request.
@@ -41,15 +62,14 @@ async def video_upload(
         dict[str, str]: Confirmation payload with ``message`` and ``job_id``.
 
     Raises:
-        OSError: If the destination directory or file cannot be written.
+        ValueError: If the S3 bucket is not configured.
+        botocore.exceptions.BotoCoreError: If AWS configuration is invalid.
+        botocore.exceptions.ClientError: If S3 rejects the upload.
     """
     video_bytes = await file.read()
 
     job_id = str(uuid.uuid4())
-    video_dir = DATA_DIR / job_id
-    video_dir.mkdir(parents=True, exist_ok=True)
-    destination_path = video_dir / "video.mp4"
-    destination_path.write_bytes(video_bytes)
+    await run_in_threadpool(put_object, f"{job_id}/video.mp4", video_bytes)
 
     enqueue_reconstruction(
         job_id, strides, reconstruction, feature_extractor_algorithm,
