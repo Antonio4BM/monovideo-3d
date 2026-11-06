@@ -12,8 +12,22 @@ from app.main import app
 client = TestClient(app)
 
 
-def test_video_upload_enqueues_sparse_job(tmp_path, monkeypatch):
-    """Save the uploaded video and enqueue sparse reconstruction with SIFT."""
+@pytest.fixture
+def put_object_mock(monkeypatch):
+    """Mock the S3 upload so endpoint tests do not need AWS credentials."""
+    mock = MagicMock()
+    monkeypatch.setattr("app.main.put_object", mock)
+
+    async def run_inline(function, *args):
+        """Run the mocked blocking call inline for deterministic endpoint tests."""
+        return function(*args)
+
+    monkeypatch.setattr("app.main.run_in_threadpool", run_inline)
+    return mock
+
+
+def test_video_upload_enqueues_sparse_job(tmp_path, monkeypatch, put_object_mock):
+    """Upload the video to S3 and enqueue sparse reconstruction with SIFT."""
     monkeypatch.chdir(tmp_path)
     Path("data").mkdir()
     Path("static").mkdir()
@@ -33,15 +47,17 @@ def test_video_upload_enqueues_sparse_job(tmp_path, monkeypatch):
     assert "job_id" in payload
 
     job_id = payload["job_id"]
-    video_path = Path("data") / job_id / "video.mp4"
-    assert video_path.is_file()
-    assert video_path.read_bytes() == b"video-bytes"
+    put_object_mock.assert_called_once_with(
+        f"{job_id}/video.mp4", b"video-bytes",
+    )
     enqueue.assert_called_once_with(job_id, 10, "sparse", "SIFT")
 
 
 @pytest.mark.parametrize("algorithm", ["SIFT", "ORB", "AKAZE"])
-def test_video_upload_enqueues_dense_job(tmp_path, monkeypatch, algorithm):
-    """Enqueue dense reconstruction with the selected feature algorithm."""
+def test_video_upload_enqueues_dense_job(
+    tmp_path, monkeypatch, algorithm, put_object_mock,
+):
+    """Upload to S3 and enqueue dense reconstruction with the selected algorithm."""
     monkeypatch.chdir(tmp_path)
     Path("data").mkdir()
     Path("static").mkdir()
@@ -59,8 +75,12 @@ def test_video_upload_enqueues_dense_job(tmp_path, monkeypatch, algorithm):
         )
 
     assert response.status_code == 200
+    job_id = response.json()["job_id"]
+    put_object_mock.assert_called_once_with(
+        f"{job_id}/video.mp4", b"video-bytes",
+    )
     enqueue.assert_called_once_with(
-        response.json()["job_id"], 5, "dense", algorithm,
+        job_id, 5, "dense", algorithm,
     )
 
 
