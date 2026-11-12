@@ -8,10 +8,26 @@ import pytest
 from app.queue.jobs import (
     build_sparse_paths,
     enqueue_reconstruction,
+    process_dense_job,
     run_dense_reconstruction,
     run_sparse_reconstruction,
 )
-from app.queue.settings import JOB_TIMEOUT
+from app.settings import Settings
+
+DEFAULT_SETTINGS = Settings(data_directory=Path("data"), job_timeout=3300)
+
+
+@pytest.fixture(autouse=True)
+def configure_job_settings(monkeypatch):
+    """Use explicit shared Pydantic settings and mock the S3 video download."""
+    monkeypatch.setattr("app.queue.jobs.get_settings", lambda: DEFAULT_SETTINGS)
+
+    def download_video(key, destination):
+        assert key == f"{destination.parent.name}/video.mp4"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"fake-video")
+
+    monkeypatch.setattr("app.queue.jobs.get_object", download_video)
 
 
 def test_build_sparse_paths():
@@ -24,6 +40,7 @@ def test_build_sparse_paths():
 def test_run_sparse_reconstruction_missing_video(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     job_id = "missing-job"
+    monkeypatch.setattr("app.queue.jobs.get_object", lambda key, destination: None)
 
     with pytest.raises(FileNotFoundError, match="Video not found"):
         run_sparse_reconstruction(job_id, strides=5)
@@ -95,6 +112,7 @@ def test_run_dense_reconstruction_runs_sparse_then_dense(
     assert "colmap-dense" in dense_args
     assert "--images_path" in dense_args
     assert "data/job-dense/frames" in dense_args
+    assert not (tmp_path / video_dir / "video.mp4").exists()
 
 
 def test_enqueue_reconstruction_sparse_uses_queue():
@@ -113,11 +131,11 @@ def test_enqueue_reconstruction_sparse_uses_queue():
 
     assert job is fake_job
     fake_queue.enqueue.assert_called_once_with(
-        run_sparse_reconstruction,
+        process_dense_job,
         "uuid-1",
         10,
         feature_extractor_algorithm="SIFT",
-        job_timeout=JOB_TIMEOUT,
+        job_timeout=DEFAULT_SETTINGS.job_timeout,
     )
 
 
@@ -141,7 +159,7 @@ def test_enqueue_reconstruction_dense_uses_queue():
         "uuid-dense",
         5,
         feature_extractor_algorithm="SIFT",
-        job_timeout=JOB_TIMEOUT,
+        job_timeout=DEFAULT_SETTINGS.job_timeout,
     )
 
 
@@ -168,11 +186,11 @@ def test_enqueue_reconstruction_creates_queue_when_omitted():
 
     get_queue.assert_called_once_with()
     fake_queue.enqueue.assert_called_once_with(
-        run_sparse_reconstruction,
+        process_dense_job,
         "uuid-2",
         5,
         feature_extractor_algorithm="SIFT",
-        job_timeout=JOB_TIMEOUT,
+        job_timeout=DEFAULT_SETTINGS.job_timeout,
     )
     assert job is fake_job
 
@@ -186,7 +204,7 @@ def test_enqueue_passes_algorithm_to_worker(algorithm, mode):
         "job", 5, mode, queue=queue, feature_extractor_algorithm=algorithm
     )
     assert queue.enqueue.call_args.kwargs["feature_extractor_algorithm"] == algorithm
-    assert queue.enqueue.call_args.kwargs["job_timeout"] == JOB_TIMEOUT
+    assert queue.enqueue.call_args.kwargs["job_timeout"] == DEFAULT_SETTINGS.job_timeout
 
 
 def test_enqueue_rejects_invalid_algorithm():

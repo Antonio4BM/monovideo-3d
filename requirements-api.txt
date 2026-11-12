@@ -1,5 +1,7 @@
 fastapi
+boto3
 python-multipart
+pydantic-settings
 redis
 rq
 uvicorn

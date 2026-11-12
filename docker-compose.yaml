@@ -26,6 +26,18 @@ services:
       QUEUE_NAME: "${QUEUE_NAME:-monovideo-3d}"
       DATA_DIR: "${DATA_DIR:-data}"
       JOB_TIMEOUT: "3300"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID in .env}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY in .env}"
+      AWS_PROFILE: "${AWS_PROFILE:-default}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_CONFIG_FILE: /tmp/aws-config
+      S3_BUCKET: "${S3_BUCKET:?Set S3_BUCKET to the video upload bucket}"
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        printf '[profile %s]\nregion = %s\n' "$$AWS_PROFILE" "$$AWS_DEFAULT_REGION" > "$$AWS_CONFIG_FILE"
+        exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       redis:
         condition: service_healthy
@@ -44,10 +56,21 @@ services:
       QUEUE_NAME: "${QUEUE_NAME:-monovideo-3d}"
       DATA_DIR: "${DATA_DIR:-data}"
       JOB_TIMEOUT: "3300"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID in .env}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY in .env}"
+      AWS_PROFILE: "${AWS_PROFILE:-default}"
+      AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
+      AWS_CONFIG_FILE: /tmp/aws-config
+      S3_BUCKET: "${S3_BUCKET:?Set S3_BUCKET to the video upload bucket}"
     depends_on:
       redis:
         condition: service_healthy
-    command: ["rq", "worker", "${QUEUE_NAME:-monovideo-3d}", "--url", "redis://redis:${REDIS_PORT:-6379}/${REDIS_DB:-0}"]
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        printf '[profile %s]\nregion = %s\n' "$$AWS_PROFILE" "$$AWS_DEFAULT_REGION" > "$$AWS_CONFIG_FILE"
+        exec rq worker "$$QUEUE_NAME" --url "redis://$$REDIS_HOST:$$REDIS_PORT/$$REDIS_DB"
     deploy:
       resources:
         reservations:

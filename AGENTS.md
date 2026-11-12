@@ -14,7 +14,8 @@ The project should have the next structure:
 ├── package.json
 ├── package-lock.json
 ├── README.md
-├── requirements.txt
+├── requirements-api.txt
+├── requirements-worker.txt
 ├── static
 ├── tests
 └── vitest.config.js

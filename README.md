@@ -46,7 +46,8 @@ monovideo3d/
 ├── data/                           # Uploaded videos and COLMAP outputs (gitignored)
 ├── Dockerfile                      # COLMAP base image + Python venv + uvicorn
 ├── docker-compose.yaml             # API, Redis, and RQ worker (GPU)
-├── requirements.txt                # Python dependencies
+├── requirements-api.txt            # FastAPI service dependencies
+├── requirements-worker.txt         # Reconstruction worker dependencies
 ├── package.json                    # Frontend test tooling (Vitest)
 └── vitest.config.js
 ```
@@ -60,9 +61,11 @@ monovideo3d/
 
 ### Python packages
 
-From `requirements.txt`:
+Across `requirements-api.txt` and `requirements-worker.txt`:
 
 - `fastapi`, `uvicorn`, `python-multipart` — API and uploads
+- `boto3` — S3 video storage using the selected AWS profile
+- `pydantic-settings` — typed application configuration from Compose environment variables
 - `opencv-python` — frame extraction
 - `open3d`, `trimesh`, `numpy` — 3D I/O / conversion
 - `redis`, `rq` — job queue (upload → background reconstruction)
@@ -71,18 +74,42 @@ From `requirements.txt`:
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r requirements-api.txt -r requirements-worker.txt
 ```
 
 ## Usage
 
 ### Docker (recommended)
 
+Set these variables in the project-root `.env` file (see `.env.example`):
+
+```dotenv
+AWS_ACCESS_KEY_ID=your-access-key
+AWS_SECRET_ACCESS_KEY=your-secret-key
+AWS_PROFILE=default
+AWS_DEFAULT_REGION=us-east-1
+S3_BUCKET=your-video-bucket
+DATA_DIR=data
+```
+
+The credentials must allow `s3:PutObject` and `s3:GetObject` on the bucket.
+Compose passes these values
+to the API and worker, where `app/settings.py` validates and caches them. Compose
+creates the profile's region configuration inside the container. No host AWS
+directory is mounted or copied. `.env` is excluded from Git and Docker builds.
+
 ```bash
 docker compose up --build
 ```
 
-Open [http://localhost:8000](http://localhost:8000). Upload a video between **20 and 40 seconds** (client-side validation), choose a frame stride and sparse or dense reconstruction. The file is saved as `data/<uuid>/video.mp4` and a worker runs the pipeline.
+Open [http://localhost:8000](http://localhost:8000). The upload endpoint stores the
+video only at `s3://<S3_BUCKET>/<job_id>/video.mp4`, enqueues reconstruction after
+the upload succeeds, and returns its job ID. The worker downloads the video to
+`data/<job_id>/video.mp4` before frame extraction. Both sparse and dense
+reconstruction use this download step.
+The worker removes its local `video.mp4` after the job finishes or raises an
+error, including when a download fails partway through. Frames, reconstructed
+models, and the original video in S3 are retained.
 
 Finished models appear at [http://localhost:8000/reconstructions](http://localhost:8000/reconstructions). Sparse jobs produce `colmap/reconstructed.glb`; dense jobs also produce `colmap/fused.glb`.
 
@@ -90,6 +117,11 @@ Finished models appear at [http://localhost:8000/reconstructions](http://localho
 
 ```bash
 source venv/bin/activate
+set -a
+source .env
+set +a
+# Direct credentials need no named profile outside the Compose container.
+unset AWS_PROFILE AWS_DEFAULT_PROFILE
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
