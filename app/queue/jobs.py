@@ -1,5 +1,6 @@
 """Background jobs that run the reconstruction pipeline."""
 
+import logging
 import subprocess
 import sys
 from pathlib import Path
@@ -16,6 +17,33 @@ RECONSTRUCTION_SPARSE = "sparse"
 RECONSTRUCTION_DENSE = "dense"
 VALID_FEATURE_ALGORITHMS = frozenset({"SIFT", "ORB", "AKAZE"})
 VALID_RECONSTRUCTIONS = frozenset({RECONSTRUCTION_SPARSE, RECONSTRUCTION_DENSE})
+logger = logging.getLogger(__name__)
+
+
+def _remove_local_video(job_id: str, video_path: str) -> None:
+    """Remove a job's local video and log the cleanup activity.
+
+    Args:
+        job_id (str): UUID identifying the reconstruction job.
+        video_path (str): Local path to the downloaded video.
+
+    Raises:
+        OSError: If the video exists but cannot be removed.
+    """
+    local_video = Path(video_path)
+    if not local_video.exists():
+        logger.debug("No local video to remove for job %s at %s", job_id, video_path)
+        return
+
+    logger.info("Removing local video for job %s at %s", job_id, video_path)
+    try:
+        local_video.unlink()
+    except OSError:
+        logger.exception(
+            "Failed to remove local video for job %s at %s", job_id, video_path,
+        )
+        raise
+    logger.info("Removed local video for job %s at %s", job_id, video_path)
 
 
 def build_sparse_paths(job_id: str) -> tuple[str, str]:
@@ -115,7 +143,7 @@ def process_dense_job(
             job_id, strides, feature_extractor_algorithm,
         )
     finally:
-        Path(video_path).unlink(missing_ok=True)
+        _remove_local_video(job_id, video_path)
 
 
 def run_dense_reconstruction(
@@ -165,7 +193,7 @@ def run_dense_reconstruction(
             "reconstruction": RECONSTRUCTION_DENSE,
         }
     finally:
-        Path(video_path).unlink(missing_ok=True)
+        _remove_local_video(job_id, video_path)
 
 
 def enqueue_reconstruction(
