@@ -1,6 +1,7 @@
 """Store uploaded videos in Amazon S3 using the configured AWS profile."""
 
 import atexit
+import logging
 import os
 import shutil
 from pathlib import Path
@@ -11,6 +12,8 @@ import boto3
 from pydantic import SecretStr
 
 from app.settings import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 _client: Any = None
 _client_lock = Lock()
@@ -117,12 +120,21 @@ def put_object(key: str, body: bytes) -> dict[str, Any]:
     """
     settings = get_settings()
     client = _get_s3_client(settings)
-    return client.put_object(
-        Bucket=settings.s3_bucket,
-        Key=key,
-        Body=body,
-        ContentType="video/mp4",
-    )
+    logger.info("Uploading S3 object s3://%s/%s", settings.s3_bucket, key)
+    try:
+        response = client.put_object(
+            Bucket=settings.s3_bucket,
+            Key=key,
+            Body=body,
+            ContentType="video/mp4",
+        )
+    except Exception:
+        logger.exception(
+            "Failed to upload S3 object s3://%s/%s", settings.s3_bucket, key,
+        )
+        raise
+    logger.info("Uploaded S3 object s3://%s/%s", settings.s3_bucket, key)
+    return response
 
 
 def get_object(key: str, destination: Path) -> None:
@@ -140,11 +152,37 @@ def get_object(key: str, destination: Path) -> None:
     """
     settings = get_settings()
     client = _get_s3_client(settings)
-    response = client.get_object(Bucket=settings.s3_bucket, Key=key)
+    logger.info(
+        "Downloading S3 object s3://%s/%s to %s",
+        settings.s3_bucket,
+        key,
+        destination,
+    )
+    try:
+        response = client.get_object(Bucket=settings.s3_bucket, Key=key)
+    except Exception:
+        logger.exception(
+            "Failed to download S3 object s3://%s/%s", settings.s3_bucket, key,
+        )
+        raise
     body = response["Body"]
     try:
         destination.parent.mkdir(parents=True, exist_ok=True)
         with destination.open("wb") as video:
             shutil.copyfileobj(body, video)
+    except Exception:
+        logger.exception(
+            "Failed to save S3 object s3://%s/%s to %s",
+            settings.s3_bucket,
+            key,
+            destination,
+        )
+        raise
     finally:
         body.close()
+    logger.info(
+        "Downloaded S3 object s3://%s/%s to %s",
+        settings.s3_bucket,
+        key,
+        destination,
+    )
