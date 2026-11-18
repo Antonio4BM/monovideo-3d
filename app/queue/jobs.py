@@ -3,49 +3,26 @@
 import logging
 import subprocess
 import sys
+import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from rq import Queue
 from rq.job import Job
 
+from app.queue.artifacts import cleanup_published_artifacts, prepare_artifacts
 from app.queue.connection import get_queue
+from app.queue.publish import publish_artifacts
 from app.s3 import get_object
 from app.settings import get_settings
+
+logging.basicConfig(level=logging.INFO)
 
 RECONSTRUCTION_SPARSE = "sparse"
 RECONSTRUCTION_DENSE = "dense"
 VALID_FEATURE_ALGORITHMS = frozenset({"SIFT", "ORB", "AKAZE"})
 VALID_RECONSTRUCTIONS = frozenset({RECONSTRUCTION_SPARSE, RECONSTRUCTION_DENSE})
-logger = logging.getLogger(__name__)
-
-
-def _remove_local_video(job_id: str, video_path: str) -> None:
-    """Remove a job's local video and log the cleanup activity.
-
-    Args:
-        job_id (str): UUID identifying the reconstruction job.
-        video_path (str): Local path to the downloaded video.
-
-    Raises:
-        OSError: If the video exists but cannot be removed.
-    """
-    local_video = Path(video_path)
-    if not local_video.exists():
-        logger.debug("No local video to remove for job %s at %s", job_id, video_path)
-        return
-
-    logger.info("Removing local video for job %s at %s", job_id, video_path)
-    try:
-        local_video.unlink()
-    except OSError:
-        logger.exception(
-            "Failed to remove local video for job %s at %s", job_id, video_path,
-        )
-        raise
-    logger.info("Removed local video for job %s at %s", job_id, video_path)
-
-
 def build_sparse_paths(job_id: str) -> tuple[str, str]:
     """Build relative video and frames paths for a job UUID.
 
@@ -119,7 +96,7 @@ def process_dense_job(
     strides: int,
     feature_extractor_algorithm: str = "SIFT",
 ) -> dict[str, str]:
-    """Run sparse reconstruction and remove the local video on exit.
+    """Run sparse reconstruction and retain local files on failure.
 
     Args:
         job_id (str): UUID of the upload directory under ``data/``.
@@ -138,12 +115,19 @@ def process_dense_job(
         OSError: If the local video cannot be written or removed.
     """
     video_path, _ = build_sparse_paths(job_id)
-    try:
-        return run_sparse_reconstruction(
-            job_id, strides, feature_extractor_algorithm,
-        )
-    finally:
-        _remove_local_video(job_id, video_path)
+    started = time.monotonic()
+    result = run_sparse_reconstruction(
+        job_id, strides, feature_extractor_algorithm,
+    )
+    duration = time.monotonic() - started
+    completed_at = datetime.now(timezone.utc).isoformat()
+    summary_path = prepare_artifacts(
+        Path(video_path).parent, job_id, RECONSTRUCTION_SPARSE,
+        feature_extractor_algorithm, strides, completed_at, duration,
+    )
+    publish_artifacts(summary_path)
+    cleanup_published_artifacts(Path(video_path).parent, feature_extractor_algorithm)
+    return result
 
 
 def run_dense_reconstruction(
@@ -151,7 +135,7 @@ def run_dense_reconstruction(
     strides: int,
     feature_extractor_algorithm: str = "SIFT",
 ) -> dict[str, str]:
-    """Run sparse then dense reconstruction and remove the local video on exit.
+    """Run sparse then dense reconstruction and retain files on failure.
 
     Args:
         job_id (str): UUID of the upload directory under ``data/``.
@@ -170,30 +154,36 @@ def run_dense_reconstruction(
         OSError: If the local video cannot be written or removed.
     """
     video_path, _ = build_sparse_paths(job_id)
-    try:
-        sparse_result = run_sparse_reconstruction(
-            job_id, strides,
-            feature_extractor_algorithm=feature_extractor_algorithm,
-        )
-        output_path = sparse_result["output_path"]
+    started = time.monotonic()
+    sparse_result = run_sparse_reconstruction(
+        job_id, strides,
+        feature_extractor_algorithm=feature_extractor_algorithm,
+    )
+    output_path = sparse_result["output_path"]
 
-        subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "app.reconstruction",
-                "colmap-dense",
-                "--images_path",
-                output_path,
-            ],
-            check=True,
-        )
-        return {
-            **sparse_result,
-            "reconstruction": RECONSTRUCTION_DENSE,
-        }
-    finally:
-        _remove_local_video(job_id, video_path)
+    subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "app.reconstruction",
+            "colmap-dense",
+            "--images_path",
+            output_path,
+        ],
+        check=True,
+    )
+    duration = time.monotonic() - started
+    completed_at = datetime.now(timezone.utc).isoformat()
+    summary_path = prepare_artifacts(
+        Path(video_path).parent, job_id, RECONSTRUCTION_DENSE,
+        feature_extractor_algorithm, strides, completed_at, duration,
+    )
+    publish_artifacts(summary_path)
+    cleanup_published_artifacts(Path(video_path).parent, feature_extractor_algorithm)
+    return {
+        **sparse_result,
+        "reconstruction": RECONSTRUCTION_DENSE,
+    }
 
 
 def enqueue_reconstruction(
