@@ -1,5 +1,6 @@
 """Tests for reconstruction queue jobs."""
 
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -89,8 +90,15 @@ def test_run_dense_reconstruction_runs_sparse_then_dense(
     video_dir.mkdir(parents=True)
     (video_dir / "video.mp4").write_bytes(b"fake-video")
 
-    with patch("app.queue.jobs.subprocess.run") as run_mock:
+    with patch("app.queue.jobs.time.monotonic", side_effect=[10.0, 12.5]), patch(
+        "app.queue.jobs.subprocess.run"
+    ) as run_mock, patch(
+        "app.queue.jobs.prepare_artifacts"
+    ) as prepare_mock, patch(
+        "app.queue.jobs.publish_artifacts"
+    ) as publish_mock:
         run_mock.return_value = MagicMock(returncode=0)
+        prepare_mock.return_value = Path("data/job-dense/artifacts/summary.json")
         result = run_dense_reconstruction(
             job_id, strides=8, feature_extractor_algorithm=algorithm
         )
@@ -113,6 +121,124 @@ def test_run_dense_reconstruction_runs_sparse_then_dense(
     assert "--images_path" in dense_args
     assert "data/job-dense/frames" in dense_args
     assert not (tmp_path / video_dir / "video.mp4").exists()
+    artifact_args = prepare_mock.call_args.args
+    assert artifact_args[:5] == (video_dir, job_id, "dense", algorithm, 8)
+    assert datetime.fromisoformat(artifact_args[5]).tzinfo == timezone.utc
+    assert artifact_args[6] == 2.5
+    publish_mock.assert_called_once_with(prepare_mock.return_value)
+
+
+def test_sparse_job_prepares_artifacts_after_pipeline(tmp_path, monkeypatch):
+    """Prepare sparse artifacts only after the pipeline returns successfully."""
+    monkeypatch.chdir(tmp_path)
+    with patch("app.queue.jobs.time.monotonic", side_effect=[2.0, 5.0]), patch(
+        "app.queue.jobs.run_sparse_reconstruction"
+    ) as run_mock, patch(
+        "app.queue.jobs.prepare_artifacts"
+    ) as prepare_mock, patch(
+        "app.queue.jobs.publish_artifacts"
+    ) as publish_mock:
+        run_mock.return_value = {"job_id": "job-sparse"}
+        prepare_mock.return_value = Path("data/job-sparse/artifacts/summary.json")
+        result = process_dense_job("job-sparse", 5, "ORB")
+
+    assert result == {"job_id": "job-sparse"}
+    artifact_args = prepare_mock.call_args.args
+    assert artifact_args[:5] == (
+        Path("data/job-sparse"), "job-sparse", "sparse", "ORB", 5,
+    )
+    assert datetime.fromisoformat(artifact_args[5]).tzinfo == timezone.utc
+    assert artifact_args[6] == 3.0
+    publish_mock.assert_called_once_with(prepare_mock.return_value)
+
+
+@pytest.mark.parametrize("worker", [process_dense_job, run_dense_reconstruction])
+@pytest.mark.parametrize("failed_step", ["prepare", "publish"])
+def test_job_failure_retains_local_files(
+    tmp_path, monkeypatch, worker, failed_step,
+):
+    """Propagate preparation or publication failures without local cleanup."""
+    monkeypatch.chdir(tmp_path)
+    job_root = Path("data/job-failed")
+    files = [
+        job_root / "video.mp4",
+        job_root / "colmap/database.db",
+        job_root / "frames/frame.jpg",
+        job_root / "colmap/reconstructed.glb",
+        job_root / "artifacts/database.db",
+        job_root / "artifacts/features.tar",
+        job_root / "artifacts/summary.json",
+    ]
+    for path in files:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"retained")
+    sparse_result = {
+        "job_id": "job-failed",
+        "output_path": str(job_root / "frames"),
+    }
+
+    with patch("app.queue.jobs.run_sparse_reconstruction") as sparse, patch(
+        "app.queue.jobs.subprocess.run"
+    ), patch("app.queue.jobs.prepare_artifacts") as prepare, patch(
+        "app.queue.jobs.publish_artifacts"
+    ) as publish:
+        sparse.return_value = sparse_result
+        prepare.return_value = job_root / "artifacts/summary.json"
+        if failed_step == "prepare":
+            prepare.side_effect = RuntimeError("preparation failed")
+        else:
+            publish.side_effect = RuntimeError("publication failed")
+
+        with pytest.raises(RuntimeError, match="failed"):
+            worker("job-failed", 5, "ORB")
+
+    assert all(path.is_file() for path in files)
+    if failed_step == "prepare":
+        publish.assert_not_called()
+    else:
+        publish.assert_called_once_with(job_root / "artifacts/summary.json")
+
+
+@pytest.mark.parametrize("worker", [process_dense_job, run_dense_reconstruction])
+@pytest.mark.parametrize("algorithm", ["SIFT", "ORB", "AKAZE"])
+def test_success_removes_published_files_and_keeps_outputs(
+    tmp_path, monkeypatch, worker, algorithm,
+):
+    """Clean local database, feature files, and artifacts after publication."""
+    monkeypatch.chdir(tmp_path)
+    job_root = Path("data/job-complete")
+    video = job_root / "video.mp4"
+    database = job_root / "colmap/database.db"
+    model = job_root / "colmap/reconstructed.glb"
+    frame = job_root / "frames/frame.jpg"
+    summary = job_root / "artifacts/summary.json"
+    snapshot = job_root / "artifacts/database.db"
+    archive = job_root / "artifacts/features.tar"
+    feature = job_root / "colmap/features" / algorithm.lower() / "frame.npz"
+    for path in (video, database, model, frame, summary, snapshot, archive):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"local")
+    if algorithm != "SIFT":
+        feature.parent.mkdir(parents=True)
+        feature.write_bytes(b"npz")
+
+    with patch("app.queue.jobs.run_sparse_reconstruction") as sparse, patch(
+        "app.queue.jobs.subprocess.run"
+    ), patch("app.queue.jobs.prepare_artifacts", return_value=summary), patch(
+        "app.queue.jobs.publish_artifacts"
+    ) as publish:
+        sparse.return_value = {
+            "job_id": "job-complete", "output_path": str(job_root / "frames"),
+        }
+        worker("job-complete", 5, algorithm)
+
+    publish.assert_called_once_with(summary)
+    assert not video.exists()
+    assert not database.exists()
+    assert not (job_root / "artifacts").exists()
+    assert not feature.exists()
+    assert model.is_file()
+    assert frame.is_file()
 
 
 def test_enqueue_reconstruction_sparse_uses_queue():
