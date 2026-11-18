@@ -89,10 +89,14 @@ AWS_SECRET_ACCESS_KEY=your-secret-key
 AWS_PROFILE=default
 AWS_DEFAULT_REGION=us-east-1
 S3_BUCKET=your-video-bucket
+DYNAMODB_TABLE_NAME=your-jobs-table
 DATA_DIR=data
 ```
 
-The credentials must allow `s3:PutObject` and `s3:GetObject` on the bucket.
+The API credentials need `s3:PutObject` on the bucket's objects. The worker
+credentials need `s3:GetObject` and `s3:PutObject`. See [AWS
+infrastructure and worker permissions](#aws-infrastructure-and-worker-permissions)
+for the table and worker IAM policy.
 Compose passes these values
 to the API and worker, where `app/settings.py` validates and caches them. Compose
 creates the profile's region configuration inside the container. No host AWS
@@ -107,9 +111,58 @@ video only at `s3://<S3_BUCKET>/<job_id>/video.mp4`, enqueues reconstruction aft
 the upload succeeds, and returns its job ID. The worker downloads the video to
 `data/<job_id>/video.mp4` before frame extraction. Both sparse and dense
 reconstruction use this download step.
-The worker removes its local `video.mp4` after the job finishes or raises an
-error, including when a download fails partway through. Frames, reconstructed
-models, and the original video in S3 are retained.
+After publication succeeds, the worker removes the local `video.mp4`, the
+original `colmap/database.db`, ORB or AKAZE `.npz` files, and the entire local
+`artifacts/` directory. Frames and reconstructed models remain for the gallery
+and viewer. If reconstruction, preparation, or publication fails, the RQ job
+fails and all local files created so far are retained.
+
+After a successful sparse or dense pipeline, the worker saves a consistent
+SQLite backup at `data/<job_id>/artifacts/database.db` and a JSON summary at
+`data/<job_id>/artifacts/summary.json`. ORB and AKAZE jobs also save
+`data/<job_id>/artifacts/features.tar`, containing
+`colmap/features/<algorithm>/` and its `.npz` files. SIFT jobs have no feature
+archive. These local files remain available if publication fails.
+The summary records the job ID, reconstruction mode, feature algorithm,
+completion time in UTC, elapsed seconds through pipeline completion, and local
+artifact paths. It counts images and sums keypoint and match rows from the
+SQLite snapshot. SIFT descriptor totals come from SQLite; ORB and AKAZE totals
+come from their NPZ descriptor arrays. The median triangulation angle is read
+from SQLite when available and is otherwise `null`.
+The worker uploads the snapshot to `<job_id>/database.db`, then uploads
+the optional archive to `<job_id>/features.tar`. It writes one DynamoDB
+summary for the requested reconstruction only after the uploads succeed. The
+item includes each uploaded S3 key and object version ID. Set
+`DYNAMODB_TABLE_NAME` to the Terraform output shown below.
+
+To retry publication without running reconstruction, execute this command from
+the project root with the job's UUID:
+
+```bash
+JOB_ID=123e4567-e89b-12d3-a456-426614174000
+docker compose exec worker python -m app.queue.retry_publish "$JOB_ID"
+```
+
+The same `python -m app.queue.retry_publish "$JOB_ID"` command works in a configured
+local worker environment. It reads the saved summary and artifacts under
+`DATA_DIR`, uploads the files again, and replaces the DynamoDB item for that
+job. The item records the new S3 object version IDs. After that write succeeds,
+the retry command performs the same local cleanup as the worker.
+
+### AWS infrastructure and worker permissions
+
+The Terraform configuration in `infra/` manages the existing S3 bucket and an
+on-demand DynamoDB jobs table. The table uses a string `job_id` partition key.
+After applying the configuration, get its name with
+`terraform -chdir=infra output -raw dynamodb_table_name`.
+
+Grant the worker `s3:GetObject` and `s3:PutObject` on
+`arn:aws:s3:::<bucket-name>/*`. For job records in DynamoDB, grant
+`dynamodb:PutItem` on
+`arn:aws:dynamodb:<region>:<account-id>:table/<table-name>`. Scope both
+resources to the bucket and table managed by `infra/`. The bucket must have
+versioning enabled so S3 returns object version IDs. The API's S3 upload
+permission is separate from the worker permissions.
 
 Finished models appear at [http://localhost:8000/reconstructions](http://localhost:8000/reconstructions). Sparse jobs produce `colmap/reconstructed.glb`; dense jobs also produce `colmap/fused.glb`.
 
