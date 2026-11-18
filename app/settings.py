@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     """Typed configuration shared by the API and reconstruction worker."""
 
     s3_bucket: str = ""
+    dynamodb_table_name: str = ""
     aws_profile: str = ""
     aws_access_key_id: SecretStr = SecretStr("")
     aws_secret_access_key: SecretStr = SecretStr("")
@@ -28,7 +29,10 @@ class Settings(BaseSettings):
         populate_by_name=True,
     )
 
-    @field_validator("s3_bucket", "aws_profile", "aws_default_region", mode="before")
+    @field_validator(
+        "s3_bucket", "dynamodb_table_name", "aws_profile",
+        "aws_default_region", mode="before",
+    )
     @classmethod
     def strip_text_settings(cls, value: object) -> object:
         """Remove surrounding whitespace from text configuration values.
