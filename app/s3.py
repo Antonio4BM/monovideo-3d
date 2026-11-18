@@ -8,9 +8,7 @@ from pathlib import Path
 from threading import Lock
 from typing import Any
 
-import boto3
-from pydantic import SecretStr
-
+from app.aws import get_aws_session
 from app.settings import Settings, get_settings
 
 logger = logging.getLogger(__name__)
@@ -40,18 +38,6 @@ if hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_reset_client_after_fork)
 
 
-def _secret_value(secret: SecretStr) -> str | None:
-    """Return a configured secret as plain text for the AWS SDK.
-
-    Args:
-        secret (SecretStr): Protected setting value.
-
-    Returns:
-        str | None: Plain secret value, or ``None`` when it is empty.
-    """
-    return secret.get_secret_value() or None
-
-
 def _create_s3_client(settings: Settings) -> Any:
     """Create an S3 client from validated application settings.
 
@@ -65,22 +51,9 @@ def _create_s3_client(settings: Settings) -> Any:
         ValueError: If the bucket or required credentials are missing.
     """
     bucket = settings.s3_bucket.strip()
-    access_key = _secret_value(settings.aws_access_key_id)
-    secret_key = _secret_value(settings.aws_secret_access_key)
     if not bucket:
         raise ValueError("S3_BUCKET must be configured")
-    if not access_key or not secret_key:
-        raise ValueError(
-            "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY must be configured"
-        )
-
-    session = boto3.Session(
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name=settings.aws_default_region,
-        profile_name=settings.aws_profile,
-    )
-    return session.client("s3")
+    return get_aws_session(settings).client("s3")
 
 
 def _get_s3_client(settings: Settings) -> Any:
@@ -135,6 +108,32 @@ def put_object(key: str, body: bytes) -> dict[str, Any]:
         raise
     logger.info("Uploaded S3 object s3://%s/%s", settings.s3_bucket, key)
     return response
+
+
+def stream_file_to_s3(key: str, source: Path, content_type: str) -> dict[str, Any]:
+    """Upload a local artifact without loading it fully into memory.
+
+    Args:
+        key (str): Destination object key in the configured bucket.
+        source (Path): Existing local artifact to upload.
+        content_type (str): MIME type sent with the S3 object.
+
+    Returns:
+        dict[str, Any]: S3 response, including ``VersionId`` when versioned.
+
+    Raises:
+        OSError: If the local file cannot be opened.
+        botocore.exceptions.ClientError: If S3 rejects the upload.
+    """
+    settings = get_settings()
+    client = _get_s3_client(settings)
+    with source.open("rb") as body:
+        return client.put_object(
+            Bucket=settings.s3_bucket,
+            Key=key,
+            Body=body,
+            ContentType=content_type,
+        )
 
 
 def get_object(key: str, destination: Path) -> None:
