@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   applyOrbitFraming,
+  collectWorldPositions,
   computeOrbitFraming,
   frameViewerOnCloud,
   medianSorted,
@@ -140,6 +141,28 @@ describe("readGlbPositions", () => {
   });
 });
 
+describe("collectWorldPositions fallback", () => {
+  it("collects integer POSITION accessors when meshes are not referenced by scene nodes", () => {
+    const bin = new Uint8Array(new Float32Array([1, 2, 3, 4, 5, 6]).buffer);
+    const json = {
+      meshes: [
+        {
+          primitives: [
+            { attributes: { POSITION: 0 } },
+            { attributes: {} },
+            { attributes: { POSITION: "1" } },
+          ],
+        },
+        {},
+      ],
+      accessors: [{ bufferView: 0, componentType: 5126, count: 2, type: "VEC3" }],
+      bufferViews: [{ buffer: 0, byteOffset: 0, byteLength: 24 }],
+    };
+
+    expect(Array.from(collectWorldPositions(json, bin))).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+});
+
 describe("nodeToMatrix", () => {
   it("returns an identity-like translation matrix", () => {
     const matrix = nodeToMatrix({ translation: [1, 2, 3] });
@@ -172,6 +195,20 @@ describe("applyOrbitFraming", () => {
     });
     expect(viewerEl.getAttribute("camera-target")).toBe("1m 2m 3m");
     expect(viewerEl.getAttribute("camera-orbit")).toBe("0deg 75deg 4m");
+  });
+
+  it("updates cameraTarget and cameraOrbit properties when the viewer exposes them", () => {
+    const viewerEl = document.createElement("div");
+    viewerEl.cameraTarget = "";
+    viewerEl.cameraOrbit = "";
+
+    applyOrbitFraming(viewerEl, {
+      cameraTarget: "1m 2m 3m",
+      cameraOrbit: "0deg 75deg 4m",
+    });
+
+    expect(viewerEl.cameraTarget).toBe("1m 2m 3m");
+    expect(viewerEl.cameraOrbit).toBe("0deg 75deg 4m");
   });
 
   it("jumps the camera when the viewer exposes jumpCameraToGoal", () => {
@@ -223,5 +260,41 @@ describe("frameViewerOnCloud", () => {
     viewerEl.dispatchEvent(new Event("load"));
     await expect(pending).resolves.toBe(true);
     expect(viewerEl.getAttribute("camera-target")).toBe("5m 5m 5m");
+  });
+});
+
+describe("cancelled model framing", () => {
+  it("does not fetch when the preview has already closed", async () => {
+    const request = new AbortController();
+    request.abort();
+    const fetchImpl = vi.fn();
+    const viewer = document.createElement("div");
+    await expect(frameViewerOnCloud(viewer, "/model.glb", fetchImpl, request.signal)).resolves.toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("cancels a pending viewer load and does not apply its camera", async () => {
+    const request = new AbortController();
+    const viewer = document.createElement("div");
+    viewer.loaded = false;
+    const addSpy = vi.spyOn(viewer, "addEventListener");
+    const fetchImpl = vi.fn(async () => ({ ok: true, arrayBuffer: async () => buildGlb([[1, 2, 3]]) }));
+    const pending = frameViewerOnCloud(viewer, "/model.glb", fetchImpl, request.signal);
+    await vi.waitFor(() => expect(addSpy).toHaveBeenCalledWith("load", expect.any(Function), { once: true }));
+    request.abort();
+    await expect(pending).resolves.toBe(false);
+    viewer.dispatchEvent(new Event("load"));
+    expect(viewer.hasAttribute("camera-target")).toBe(false);
+  });
+
+  it("stops waiting when the model fails to load", async () => {
+    const viewer = document.createElement("div");
+    viewer.loaded = false;
+    const addSpy = vi.spyOn(viewer, "addEventListener");
+    const fetchImpl = vi.fn(async () => ({ ok: true, arrayBuffer: async () => buildGlb([[1, 2, 3]]) }));
+    const pending = frameViewerOnCloud(viewer, "/model.glb", fetchImpl);
+    await vi.waitFor(() => expect(addSpy).toHaveBeenCalledWith("load", expect.any(Function), { once: true }));
+    viewer.dispatchEvent(new Event("error"));
+    await expect(pending).resolves.toBe(false);
   });
 });
