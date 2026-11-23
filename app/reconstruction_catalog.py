@@ -11,8 +11,6 @@ from fastapi import HTTPException
 from app.aws import get_aws_session
 from app.reconstruction_helpers import (
     FUSED_GLB,
-    RECONSTRUCTED_GLB,
-    colmap_glb_path,
     list_finished_reconstructions,
     parse_job_id,
 )
@@ -94,41 +92,8 @@ def _completion_timestamp(job: dict) -> float:
         return float("-inf")
 
 
-def list_reconstruction_jobs(data_dir: Path) -> list[dict]:
-    """Combine published metadata with availability of local GLB models.
-
-    Args:
-        data_dir (Path): Root directory containing local job folders.
-
-    Returns:
-        list[dict]: JSON-ready metadata and nullable model URLs, newest first.
-    """
-    jobs = []
-    for item in read_published_jobs():
-        job = {field: item.get(field) for field in METADATA_FIELDS}
-        for field, value in job.items():
-            if isinstance(value, Decimal):
-                integral = int(value)
-                job[field] = integral if value == integral else float(value)
-        job.update(sparse_glb_url=None, dense_glb_url=None)
-        try:
-            job_id = parse_job_id(job["job_id"])
-        except (AttributeError, TypeError, ValueError):
-            job_id = None
-        if job_id is not None:
-            for field, filename, endpoint in (
-                ("sparse_glb_url", RECONSTRUCTED_GLB, "glb"),
-                ("dense_glb_url", FUSED_GLB, "fused"),
-            ):
-                if colmap_glb_path(data_dir, job_id, filename).is_file():
-                    job[field] = f"/api/reconstructions/{job_id}/{endpoint}"
-        jobs.append(job)
-    jobs.sort(key=_completion_timestamp, reverse=True)
-    return jobs
-
-
 def get_reconstruction_catalog(data_dir: Path) -> dict[str, list[dict]]:
-    """Build the metadata catalog while preserving the local model lists.
+    """Join published job metadata with the available local GLB models.
 
     Args:
         data_dir (Path): Root directory containing local job folders.
@@ -136,10 +101,30 @@ def get_reconstruction_catalog(data_dir: Path) -> dict[str, list[dict]]:
     Returns:
         dict[str, list[dict]]: Published jobs and legacy local GLB lists.
     """
-    return {
-        "jobs": list_reconstruction_jobs(data_dir),
-        "reconstructions": list_finished_reconstructions(data_dir),
-        "fused": list_finished_reconstructions(
-            data_dir, filename=FUSED_GLB, url_name="fused",
-        ),
-    }
+    published_jobs = read_published_jobs()
+    reconstructions = list_finished_reconstructions(data_dir)
+    fused = list_finished_reconstructions(
+        data_dir, filename=FUSED_GLB, url_name="fused",
+    )
+    sparse_urls = {item["job_id"]: item["glb_url"] for item in reconstructions}
+    dense_urls = {item["job_id"]: item["glb_url"] for item in fused}
+
+    jobs = []
+    for item in published_jobs:
+        job = {field: item.get(field) for field in METADATA_FIELDS}
+        for field, value in job.items():
+            if isinstance(value, Decimal):
+                integral = int(value)
+                job[field] = integral if value == integral else float(value)
+        try:
+            job_id = parse_job_id(job["job_id"])
+        except (AttributeError, TypeError, ValueError):
+            job_id = None
+        job.update(
+            sparse_glb_url=sparse_urls.get(job_id),
+            dense_glb_url=dense_urls.get(job_id),
+        )
+        jobs.append(job)
+    jobs.sort(key=_completion_timestamp, reverse=True)
+
+    return {"jobs": jobs, "reconstructions": reconstructions, "fused": fused}
