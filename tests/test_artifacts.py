@@ -53,7 +53,7 @@ def test_prepare_artifacts_snapshots_database_and_archives_features(
 
     try:
         summary_path = prepare_artifacts(
-            job_root, "job-1", "dense", algorithm, 10,
+            job_root, "job-1", algorithm, 10,
             "2026-11-12T12:00:00+00:00", 4.25,
         )
         summary = json.loads(summary_path.read_text())
@@ -62,7 +62,7 @@ def test_prepare_artifacts_snapshots_database_and_archives_features(
                 "complete",
             )
         assert summary["job_id"] == "job-1"
-        assert summary["reconstruction"] == "dense"
+        assert "reconstruction" not in summary
         assert summary["feature_extractor_algorithm"] == algorithm
         assert summary["strides"] == 10
         assert summary["completed_at"] == "2026-11-12T12:00:00+00:00"
@@ -96,7 +96,7 @@ def test_prepare_artifacts_snapshots_database_and_archives_features(
 def test_prepare_artifacts_requires_database(tmp_path):
     """Do not publish a summary if the source database is absent."""
     with pytest.raises(FileNotFoundError, match="COLMAP database not found"):
-        prepare_artifacts(tmp_path, "job", "sparse", "SIFT", 5, "now", 1.0)
+        prepare_artifacts(tmp_path, "job", "SIFT", 5, "now", 1.0)
     assert not (tmp_path / "artifacts/summary.json").exists()
 
 
@@ -108,7 +108,7 @@ def test_prepare_artifacts_requires_binary_feature_files(tmp_path):
         pass
 
     with pytest.raises(FileNotFoundError, match="Feature archives not found"):
-        prepare_artifacts(tmp_path, "job", "sparse", "ORB", 5, "now", 1.0)
+        prepare_artifacts(tmp_path, "job", "ORB", 5, "now", 1.0)
     assert not (tmp_path / "artifacts").exists()
 
 
@@ -123,7 +123,7 @@ def test_prepare_artifacts_handles_missing_angle_and_empty_counts(tmp_path):
         database.execute("CREATE TABLE descriptors (rows INTEGER)")
 
     summary_path = prepare_artifacts(
-        tmp_path, "job", "sparse", "SIFT", 5, "now", 1.0,
+        tmp_path, "job", "SIFT", 5, "now", 1.0,
     )
     summary = json.loads(summary_path.read_text())
     assert summary["median_triangulation_angle_degrees"] is None
@@ -150,7 +150,7 @@ def test_preparation_failure_keeps_completed_local_artifacts(tmp_path, algorithm
 
     with pytest.raises(sqlite3.OperationalError, match="no such table: images"):
         prepare_artifacts(
-            tmp_path, "job", "sparse", algorithm, 5, "now", 1.0,
+            tmp_path, "job", algorithm, 5, "now", 1.0,
         )
 
     assert (colmap / "database.db").is_file()
