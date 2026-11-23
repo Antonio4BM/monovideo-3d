@@ -93,7 +93,13 @@ def put_object(key: str, body: bytes) -> dict[str, Any]:
     """
     settings = get_settings()
     client = _get_s3_client(settings)
-    logger.info("Uploading S3 object s3://%s/%s", settings.s3_bucket, key)
+    logger.info(
+        "Uploading S3 object s3://%s/%s (%d bytes, region %s)",
+        settings.s3_bucket,
+        key,
+        len(body),
+        settings.aws_default_region,
+    )
     try:
         response = client.put_object(
             Bucket=settings.s3_bucket,
@@ -106,7 +112,12 @@ def put_object(key: str, body: bytes) -> dict[str, Any]:
             "Failed to upload S3 object s3://%s/%s", settings.s3_bucket, key,
         )
         raise
-    logger.info("Uploaded S3 object s3://%s/%s", settings.s3_bucket, key)
+    logger.info(
+        "Uploaded S3 object s3://%s/%s (retries: %s)",
+        settings.s3_bucket,
+        key,
+        response.get("ResponseMetadata", {}).get("RetryAttempts", "unknown"),
+    )
     return response
 
 
