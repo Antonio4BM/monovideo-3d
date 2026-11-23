@@ -1,80 +1,44 @@
 import {
+  createModelDialog,
   fetchReconstructionCatalog,
-  markSelectedJob,
-  renderReconstructionList,
-  showReconstruction,
+  renderReconstructionTable,
 } from "./gallery.js";
 
-const reconstructedListEl = document.querySelector("#reconstruction-list");
-const fusedListEl = document.querySelector("#fused-list");
-const listStatus = document.querySelector("#list-status");
-const fusedListStatus = document.querySelector("#fused-list-status");
-const viewerEl = document.querySelector("#model-viewer");
-const emptyEl = document.querySelector("#viewer-empty");
-
 /**
- * Loads a reconstruction into the viewer and highlights it in its list.
+ * Loads the metadata table and wires its model actions.
  *
- * @param {{ job_id: string, glb_url: string }} job Selected finished job.
- * @param {HTMLElement} sourceList List that owns the clicked job.
- * @returns {void}
- */
-function selectJob(job, sourceList) {
-  markSelectedJob(reconstructedListEl, "");
-  markSelectedJob(fusedListEl, "");
-  markSelectedJob(sourceList, job.job_id);
-  showReconstruction(viewerEl, emptyEl, job.glb_url);
-}
-
-/**
- * Renders a job list and updates its status message.
- *
- * @param {HTMLElement} listEl Target list element.
- * @param {HTMLElement} statusEl Status text element.
- * @param {Array<{ job_id: string, glb_url: string, modified_at: string }>} jobs
- *   Finished reconstructions for this list.
- * @param {string} emptyMessage Status text when the list is empty.
- * @returns {void}
- */
-function populateList(listEl, statusEl, jobs, emptyMessage) {
-  renderReconstructionList(listEl, jobs, (job) => selectJob(job, listEl));
-
-  if (jobs.length === 0) {
-    statusEl.textContent = emptyMessage;
-    return;
-  }
-
-  statusEl.textContent = `${jobs.length} finished job${jobs.length === 1 ? "" : "s"}`;
-}
-
-/**
- * Loads finished reconstructions and fused models into their lists.
- *
+ * @param {Document} [root] Page document, injectable for tests.
+ * @param {typeof fetch} [fetchImpl] Catalog fetch implementation.
  * @returns {Promise<void>}
  */
-async function init() {
-  listStatus.textContent = "Loading…";
-  fusedListStatus.textContent = "Loading…";
-
+export async function initReconstructions(root = document, fetchImpl = fetch) {
+  const statusEl = root.querySelector("#catalog-status");
+  const noticeEl = root.querySelector("#catalog-notice");
+  const tableEl = root.querySelector("#reconstruction-table");
+  const regionEl = root.querySelector("#table-region");
+  const modal = createModelDialog(root.querySelector("#model-dialog"));
+  statusEl.textContent = "Loading reconstruction metadata…";
+  regionEl.setAttribute("aria-busy", "true");
   try {
-    const catalog = await fetchReconstructionCatalog();
-    populateList(
-      reconstructedListEl,
-      listStatus,
-      catalog.reconstructions,
-      "No finished reconstructions yet.",
+    const { jobs } = await fetchReconstructionCatalog("/api/reconstructions", fetchImpl);
+    renderReconstructionTable(
+      tableEl,
+      jobs,
+      (job, type, button) => {
+        noticeEl.textContent = "";
+        modal.open(job, type, button);
+      },
+      (message) => { noticeEl.textContent = message; },
     );
-    populateList(
-      fusedListEl,
-      fusedListStatus,
-      catalog.fused,
-      "No finished fused models yet.",
-    );
+    statusEl.textContent = jobs.length
+      ? `${jobs.length} published job${jobs.length === 1 ? "" : "s"}`
+      : "No published reconstructions yet.";
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unable to load reconstructions.";
-    listStatus.textContent = message;
-    fusedListStatus.textContent = message;
+    statusEl.textContent = err instanceof Error ? err.message : "Unable to load reconstructions.";
+    statusEl.dataset.state = "error";
+  } finally {
+    regionEl.setAttribute("aria-busy", "false");
   }
 }
 
-void init();
+if (document.querySelector("#reconstruction-table")) void initReconstructions();

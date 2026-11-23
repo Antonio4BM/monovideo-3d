@@ -14,41 +14,36 @@
       <a href="/reconstructions" aria-current="page">Reconstructions</a>
     </nav>
     <h1>Finished reconstructions</h1>
-    <p class="hint">Select a reconstructed.glb or fused.glb job to view it in the model viewer.</p>
-
-    <div class="layout">
-      <div class="sidebars">
-        <aside class="sidebar">
-          <h2>Reconstructed</h2>
-          <p id="list-status" role="status" aria-live="polite">Loading…</p>
-          <ul id="reconstruction-list" class="job-list"></ul>
-        </aside>
-
-        <aside class="sidebar">
-          <h2>Fused</h2>
-          <p id="fused-list-status" role="status" aria-live="polite">Loading…</p>
-          <ul id="fused-list" class="job-list"></ul>
-        </aside>
-      </div>
-
-      <section class="viewer" aria-label="3D model">
-        <p id="viewer-empty" class="viewer__empty">Select a reconstruction to view.</p>
-        <model-viewer
-          id="model-viewer"
-          hidden
-          camera-controls
-          auto-rotate
-          auto-rotate-delay="0"
-          interaction-prompt="none"
-          touch-action="pan-y"
-          shadow-intensity="1"
-          min-camera-orbit="auto auto 2%"
-          alt="Reconstructed 3D model"
-          orientation="180deg 30deg 40deg"
-        ></model-viewer>
-      </section>
+    <p class="hint" id="table-help">Published job metadata. Scroll horizontally for all columns and model actions.</p>
+    <p id="catalog-status" role="status" aria-live="polite">Loading reconstruction metadata…</p>
+    <p id="catalog-notice" role="status" aria-live="polite"></p>
+    <div id="table-region" class="table-region" role="region" aria-label="Reconstruction metadata" aria-describedby="table-help" aria-busy="true" tabindex="0">
+      <table id="reconstruction-table" aria-label="Published reconstructions"></table>
     </div>
   </main>
+
+  <dialog id="model-dialog" aria-labelledby="model-title" aria-describedby="model-status">
+    <header class="modal-header">
+      <h2 id="model-title">3D reconstruction</h2>
+      <button id="close-model" type="button" autofocus>Close</button>
+    </header>
+    <p id="model-status" role="status" aria-live="polite"></p>
+    <div class="viewer-container"></div>
+    <template>
+      <model-viewer
+        id="model-viewer"
+        camera-controls
+        auto-rotate
+        auto-rotate-delay="0"
+        interaction-prompt="none"
+        touch-action="pan-y"
+        shadow-intensity="1"
+        min-camera-orbit="auto auto 2%"
+        alt="Reconstructed 3D model"
+        orientation="180deg 30deg 40deg"
+      ></model-viewer>
+    </template>
+  </dialog>
 
   <script type="module" src="./reconstructions.js"></script>
 </body>

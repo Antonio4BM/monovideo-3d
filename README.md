@@ -131,9 +131,14 @@ come from their NPZ descriptor arrays. The median triangulation angle is read
 from SQLite when available and is otherwise `null`.
 The worker uploads the snapshot to `<job_id>/database.db`, then uploads
 the optional archive to `<job_id>/features.tar`. It writes one DynamoDB
-summary for the requested reconstruction only after the uploads succeed. The
-item includes each uploaded S3 key and object version ID. Set
+record per job ID after uploads succeed. A dense job's record covers its sparse
+and dense models together. The item includes each uploaded S3 key and object
+version ID. Set
 `DYNAMODB_TABLE_NAME` to the Terraform output shown below.
+Local `database_snapshot`, `feature_archive`, and `summary_path` fields remain
+in the preparation summary for worker use, but are excluded from DynamoDB
+publication and the gallery API. S3 object keys and version IDs remain in the
+published record.
 
 To retry publication without running reconstruction, execute this command from
 the project root with the job's UUID:
@@ -163,8 +168,18 @@ Grant the worker `s3:GetObject` and `s3:PutObject` on
 resources to the bucket and table managed by `infra/`. The bucket must have
 versioning enabled so S3 returns object version IDs. The API's S3 upload
 permission is separate from the worker permissions.
+The API also needs `DYNAMODB_TABLE_NAME` and `dynamodb:Scan` on the same table
+ARN to read published job metadata. The Compose API service receives the table
+name from `.env`. A missing table configuration or failed DynamoDB read returns
+HTTP 503 with a readable message instead of an empty job catalog.
 
 Finished models appear at [http://localhost:8000/reconstructions](http://localhost:8000/reconstructions). Sparse jobs produce `colmap/reconstructed.glb`; dense jobs also produce `colmap/fused.glb`.
+The gallery lists every published DynamoDB job in a table with horizontal and
+vertical scrolling, including jobs whose local models are unavailable. All
+metadata is plain text. Sparse and Dense actions open
+available local GLBs in a large modal; close it with Close or Escape. When a
+sparse model exists but no fused model is present, Make dense displays a
+coming-soon message and does not enqueue a reconstruction.
 
 ### Local API
 
@@ -186,12 +201,22 @@ rq worker monovideo-3d --url redis://localhost:6379/0
 
 ### Reconstruction API
 
-- `GET /reconstructions` — HTML gallery with reconstructed and fused lists
-- `GET /api/reconstructions` — JSON catalog (`job_id`, `glb_url`, `modified_at`)
+- `GET /reconstructions` — scrollable metadata table and modal 3D viewer
+- `GET /api/reconstructions` — JSON catalog with all published `jobs`, plus
+  the existing local `reconstructions` and `fused` lists (`job_id`, `glb_url`,
+  `modified_at`). Each job contains `job_id`,
+  `feature_extractor_algorithm`, `strides`, `completed_at`,
+  `reconstruction_duration_seconds`, `image_count`, `total_keypoints`, `total_matches`,
+  `total_descriptors`, and `median_triangulation_angle_degrees`, plus nullable
+  `sparse_glb_url` and `dense_glb_url`. Missing legacy fields are `null`. Jobs
+  are sorted by completion time, newest first, with missing dates last.
 - `GET /api/reconstructions/{job_id}/glb` — serve `reconstructed.glb`
 - `GET /api/reconstructions/{job_id}/fused` — serve `fused.glb`
 
-Path helpers and listing live in `app/reconstruction_helpers.py`; `app/main.py` only defines the routes.
+Path helpers and local model listing live in `app/reconstruction_helpers.py`;
+DynamoDB reads and metadata assembly live in `app/reconstruction_catalog.py`.
+The API runs catalog assembly in a thread pool, follows all DynamoDB scan pages,
+and closes its resource client after each read. `app/main.py` defines the routes.
 
 ### Reconstruction CLI
 

@@ -22,6 +22,7 @@ def publish_workspace(tmp_path, monkeypatch):
     summary_path.write_text(json.dumps({
         "job_id": "job-1",
         "database_snapshot": "artifacts/database.db",
+        "summary_path": "artifacts/summary.json",
         "feature_archive": None,
         "reconstruction_duration_seconds": 1.25,
         "median_triangulation_angle_degrees": 8.5,
@@ -81,6 +82,7 @@ def test_publish_uploads_in_order_then_writes_summary(
     )
     assert "database_snapshot" not in item
     assert "summary_path" not in item
+    assert "feature_archive" not in item
     assert item["reconstruction_duration_seconds"] == Decimal("1.25")
     assert item["median_triangulation_angle_degrees"] == Decimal("8.5")
     resource.Table.assert_called_once_with("jobs")

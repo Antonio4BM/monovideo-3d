@@ -30,7 +30,9 @@ describe("fetchReconstructions", () => {
     await expect(fetchReconstructions("/api/reconstructions", fetchImpl)).resolves.toEqual([
       JOB,
     ]);
-    expect(fetchImpl).toHaveBeenCalledWith("/api/reconstructions");
+    expect(fetchImpl).toHaveBeenCalledWith("/api/reconstructions", {
+      signal: expect.any(AbortSignal),
+    });
   });
 
   it("returns an empty list when the payload has no reconstructions", async () => {
@@ -73,6 +75,7 @@ describe("fetchReconstructionCatalog", () => {
     }));
 
     await expect(fetchReconstructionCatalog("/api/reconstructions", fetchImpl)).resolves.toEqual({
+      jobs: [],
       reconstructions: [JOB],
       fused: [FUSED_JOB],
     });
@@ -85,6 +88,7 @@ describe("fetchReconstructionCatalog", () => {
     }));
 
     await expect(fetchReconstructionCatalog("/api/reconstructions", fetchImpl)).resolves.toEqual({
+      jobs: [],
       reconstructions: [],
       fused: [],
     });

@@ -10,7 +10,7 @@ services:
     ports:
       - "${REDIS_PORT:-6379}:${REDIS_PORT:-6379}"
 
-  monovideo3d:
+  api:
     build:
       context: .
       dockerfile: Dockerfile.api
@@ -32,6 +32,7 @@ services:
       AWS_DEFAULT_REGION: "${AWS_DEFAULT_REGION:-us-east-1}"
       AWS_CONFIG_FILE: /tmp/aws-config
       S3_BUCKET: "${S3_BUCKET:?Set S3_BUCKET to the video upload bucket}"
+      DYNAMODB_TABLE_NAME: "${DYNAMODB_TABLE_NAME:?Set DYNAMODB_TABLE_NAME to the jobs table}"
     command:
       - /bin/sh
       - -ec

@@ -122,9 +122,9 @@ def test_run_dense_reconstruction_runs_sparse_then_dense(
     assert "data/job-dense/frames" in dense_args
     assert not (tmp_path / video_dir / "video.mp4").exists()
     artifact_args = prepare_mock.call_args.args
-    assert artifact_args[:5] == (video_dir, job_id, "dense", algorithm, 8)
-    assert datetime.fromisoformat(artifact_args[5]).tzinfo == timezone.utc
-    assert artifact_args[6] == 2.5
+    assert artifact_args[:4] == (video_dir, job_id, algorithm, 8)
+    assert datetime.fromisoformat(artifact_args[4]).tzinfo == timezone.utc
+    assert artifact_args[5] == 2.5
     publish_mock.assert_called_once_with(prepare_mock.return_value)
 
 
@@ -144,11 +144,11 @@ def test_sparse_job_prepares_artifacts_after_pipeline(tmp_path, monkeypatch):
 
     assert result == {"job_id": "job-sparse"}
     artifact_args = prepare_mock.call_args.args
-    assert artifact_args[:5] == (
-        Path("data/job-sparse"), "job-sparse", "sparse", "ORB", 5,
+    assert artifact_args[:4] == (
+        Path("data/job-sparse"), "job-sparse", "ORB", 5,
     )
-    assert datetime.fromisoformat(artifact_args[5]).tzinfo == timezone.utc
-    assert artifact_args[6] == 3.0
+    assert datetime.fromisoformat(artifact_args[4]).tzinfo == timezone.utc
+    assert artifact_args[5] == 3.0
     publish_mock.assert_called_once_with(prepare_mock.return_value)
 
 
