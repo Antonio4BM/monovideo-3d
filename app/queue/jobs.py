@@ -122,8 +122,8 @@ def process_dense_job(
     duration = time.monotonic() - started
     completed_at = datetime.now(timezone.utc).isoformat()
     summary_path = prepare_artifacts(
-        Path(video_path).parent, job_id, RECONSTRUCTION_SPARSE,
-        feature_extractor_algorithm, strides, completed_at, duration,
+        Path(video_path).parent, job_id, feature_extractor_algorithm,
+        strides, completed_at, duration,
     )
     publish_artifacts(summary_path)
     cleanup_published_artifacts(Path(video_path).parent, feature_extractor_algorithm)
@@ -175,8 +175,8 @@ def run_dense_reconstruction(
     duration = time.monotonic() - started
     completed_at = datetime.now(timezone.utc).isoformat()
     summary_path = prepare_artifacts(
-        Path(video_path).parent, job_id, RECONSTRUCTION_DENSE,
-        feature_extractor_algorithm, strides, completed_at, duration,
+        Path(video_path).parent, job_id, feature_extractor_algorithm,
+        strides, completed_at, duration,
     )
     publish_artifacts(summary_path)
     cleanup_published_artifacts(Path(video_path).parent, feature_extractor_algorithm)

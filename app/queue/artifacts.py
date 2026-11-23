@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 def prepare_artifacts(
     job_root: Path,
     job_id: str,
-    reconstruction: str,
     algorithm: str,
     strides: int,
     completed_at: str,
@@ -30,7 +29,6 @@ def prepare_artifacts(
     Args:
         job_root (Path): Local directory containing the job's ``colmap`` data.
         job_id (str): Reconstruction job identifier.
-        reconstruction (str): Completed pipeline, ``sparse`` or ``dense``.
         algorithm (str): Feature algorithm, SIFT, ORB, or AKAZE.
         strides (int): Frame extraction interval used for the job.
         completed_at (str): UTC timestamp captured when reconstruction ended.
@@ -47,9 +45,6 @@ def prepare_artifacts(
     """
     if algorithm not in {"SIFT", "ORB", "AKAZE"}:
         raise ValueError(f"Unsupported feature algorithm: {algorithm}")
-    if reconstruction not in {"sparse", "dense"}:
-        raise ValueError(f"Unsupported reconstruction: {reconstruction}")
-
     source_database = job_root / "colmap" / "database.db"
     if not source_database.is_file():
         raise FileNotFoundError(f"COLMAP database not found: {source_database}")
@@ -132,7 +127,6 @@ def prepare_artifacts(
 
     summary = {
         "job_id": job_id,
-        "reconstruction": reconstruction,
         "feature_extractor_algorithm": algorithm,
         "strides": strides,
         "completed_at": completed_at,
