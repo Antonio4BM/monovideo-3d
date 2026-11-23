@@ -356,18 +356,31 @@ let frameRequestId = 0;
  * Resolves when the viewer has loaded, or immediately for plain test stubs.
  *
  * @param {HTMLElement} viewerEl Viewer element.
- * @returns {Promise<void>}
+ * @param {AbortSignal} [signal] Cancels a closed or superseded model preview.
+ * @returns {Promise<boolean>} Whether the viewer loaded successfully.
  */
-function whenViewerReady(viewerEl) {
+function whenViewerReady(viewerEl, signal) {
+  if (signal?.aborted) return Promise.resolve(false);
   if (typeof viewerEl.loaded === "boolean") {
     if (viewerEl.loaded) {
-      return Promise.resolve();
+      return Promise.resolve(true);
     }
     return new Promise((resolve) => {
-      viewerEl.addEventListener("load", () => resolve(), { once: true });
+      /** Release listeners when the model loads, fails, or is cancelled. */
+      const finish = (ready) => {
+        viewerEl.removeEventListener("load", onLoad);
+        viewerEl.removeEventListener("error", onError);
+        signal?.removeEventListener("abort", onError);
+        resolve(ready);
+      };
+      const onLoad = () => finish(true);
+      const onError = () => finish(false);
+      viewerEl.addEventListener("load", onLoad, { once: true });
+      viewerEl.addEventListener("error", onError, { once: true });
+      signal?.addEventListener("abort", onError, { once: true });
     });
   }
-  return Promise.resolve();
+  return Promise.resolve(true);
 }
 
 /**
@@ -376,18 +389,22 @@ function whenViewerReady(viewerEl) {
  * @param {HTMLElement} viewerEl `<model-viewer>` element.
  * @param {string} glbUrl GLB URL already set as ``src``.
  * @param {typeof fetch} [fetchImpl] Fetch implementation.
+ * @param {AbortSignal} [signal] Cancels framing when a preview closes.
  * @returns {Promise<boolean>} True when framing was applied.
  */
-export async function frameViewerOnCloud(viewerEl, glbUrl, fetchImpl = fetch) {
+export async function frameViewerOnCloud(viewerEl, glbUrl, fetchImpl = fetch, signal) {
   const requestId = (frameRequestId += 1);
   try {
-    const response = await fetchImpl(glbUrl);
+    if (signal?.aborted) return false;
+    const response = signal
+      ? await fetchImpl(glbUrl, { signal })
+      : await fetchImpl(glbUrl);
     if (!response.ok) {
       return false;
     }
     const buffer = await response.arrayBuffer();
-    await whenViewerReady(viewerEl);
-    if (requestId !== frameRequestId) {
+    const ready = await whenViewerReady(viewerEl, signal);
+    if (!ready || signal?.aborted || requestId !== frameRequestId) {
       return false;
     }
     const framing = computeOrbitFraming(readGlbPositions(buffer));
