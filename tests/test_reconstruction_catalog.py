@@ -9,7 +9,7 @@ from fastapi import HTTPException
 
 from app.reconstruction_catalog import (
     METADATA_FIELDS,
-    list_reconstruction_jobs,
+    get_reconstruction_catalog,
     read_published_jobs,
 )
 from app.settings import Settings
@@ -113,7 +113,7 @@ def test_model_urls_only_exist_for_available_files(
         (colmap / "reconstructed.glb").write_bytes(b"sparse")
     if dense:
         (colmap / "fused.glb").write_bytes(b"dense")
-    job, = list_reconstruction_jobs(tmp_path)
+    job, = get_reconstruction_catalog(tmp_path)["jobs"]
     assert job["sparse_glb_url"] == (
         f"/api/reconstructions/{JOB_ID}/glb" if sparse else None
     )
@@ -153,7 +153,7 @@ def test_metadata_is_json_ready_and_sorted_by_actual_completion(
     monkeypatch.setattr(
         "app.reconstruction_catalog.read_published_jobs", lambda: records,
     )
-    jobs = list_reconstruction_jobs(tmp_path)
+    jobs = get_reconstruction_catalog(tmp_path)["jobs"]
     assert [job["job_id"] for job in jobs] == [
         "newest", JOB_ID, "naive-time", "missing-time", "invalid-time",
     ]
@@ -178,7 +178,28 @@ def test_legacy_invalid_identifiers_have_no_model_urls(
         "app.reconstruction_catalog.read_published_jobs",
         lambda: [{"job_id": job_id}],
     )
-    job, = list_reconstruction_jobs(tmp_path)
+    job, = get_reconstruction_catalog(tmp_path)["jobs"]
     assert job["job_id"] == job_id
     assert job["sparse_glb_url"] is None
     assert job["dense_glb_url"] is None
+
+
+def test_catalog_keeps_local_models_without_published_metadata(tmp_path, monkeypatch):
+    """Keep the legacy model lists when DynamoDB has no matching job row."""
+    monkeypatch.setattr(
+        "app.reconstruction_catalog.read_published_jobs", lambda: [],
+    )
+    colmap = tmp_path / JOB_ID / "colmap"
+    colmap.mkdir(parents=True)
+    (colmap / "reconstructed.glb").write_bytes(b"sparse")
+    (colmap / "fused.glb").write_bytes(b"dense")
+
+    catalog = get_reconstruction_catalog(tmp_path)
+
+    assert catalog["jobs"] == []
+    assert catalog["reconstructions"][0]["glb_url"] == (
+        f"/api/reconstructions/{JOB_ID}/glb"
+    )
+    assert catalog["fused"][0]["glb_url"] == (
+        f"/api/reconstructions/{JOB_ID}/fused"
+    )
