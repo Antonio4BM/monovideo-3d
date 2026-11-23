@@ -1,4 +1,6 @@
+import logging
 import uuid
+import time
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -11,14 +13,16 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.queue.jobs import enqueue_reconstruction
+from app.reconstruction_catalog import get_reconstruction_catalog
 from app.reconstruction_helpers import (
     FUSED_GLB,
     RECONSTRUCTED_GLB,
-    list_finished_reconstructions,
     serve_colmap_glb,
 )
 from app.s3 import close_s3_client, put_object
 from app.settings import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -66,10 +70,15 @@ async def video_upload(
         botocore.exceptions.BotoCoreError: If AWS configuration is invalid.
         botocore.exceptions.ClientError: If S3 rejects the upload.
     """
+    logger.info("reading video bytes from request")
     video_bytes = await file.read()
 
     job_id = str(uuid.uuid4())
+    logger.info("uploading video for job %s to S3", job_id)
+    start_time = time.monotonic()
     await run_in_threadpool(put_object, f"{job_id}/video.mp4", video_bytes)
+    end_time = time.monotonic()
+    logger.info(f"upload took {end_time - start_time:.2f} seconds")
 
     enqueue_reconstruction(
         job_id, strides, reconstruction, feature_extractor_algorithm,
@@ -90,20 +99,16 @@ async def reconstructions_page():
 
 @app.get("/api/reconstructions")
 async def reconstructions():
-    """List finished reconstructed and fused COLMAP GLB files.
+    """List all published jobs with metadata and available local models.
 
     Returns:
-        dict[str, list[dict[str, str]]]: Payload with ``reconstructions`` and
-        ``fused`` lists of ``job_id``, ``glb_url``, and ``modified_at``.
+        dict[str, list[dict]]: Metadata ``jobs`` and the existing
+        ``reconstructions`` and ``fused`` model lists.
+
+    Raises:
+        HTTPException: 503 when DynamoDB configuration or access fails.
     """
-    return {
-        "reconstructions": list_finished_reconstructions(DATA_DIR),
-        "fused": list_finished_reconstructions(
-            DATA_DIR,
-            filename=FUSED_GLB,
-            url_name="fused",
-        ),
-    }
+    return await run_in_threadpool(get_reconstruction_catalog, DATA_DIR)
 
 
 @app.get("/api/reconstructions/{job_id}/glb")
