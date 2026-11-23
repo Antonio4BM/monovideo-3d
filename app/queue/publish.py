@@ -65,7 +65,7 @@ def publish_artifacts(summary_path: Path) -> None:
     item = {
         key: value
         for key, value in summary.items()
-        if key not in {"database_snapshot", "summary_path"}
+        if key not in {"database_snapshot", "summary_path", "feature_archive"}
     }
     item.update({
         "database_s3_key": database_key,
